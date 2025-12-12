@@ -14,7 +14,7 @@ public class Order {
     private long id;
     @Column(columnDefinition = "TIMESTAMP WITHOUT TIME ZONE")
     private Instant moment;
-    private OrderStatus orderStatus;
+    private OrderStatus status;
 
     @ManyToOne
     @JoinColumn(name = "client_id")
@@ -32,7 +32,7 @@ public class Order {
     public Order(long id, Instant moment, OrderStatus orderStatus, User client, Payment payment) {
         this.id = id;
         this.moment = moment;
-        this.orderStatus = orderStatus;
+        this.status = orderStatus;
         this.client = client;
         this.payment = payment;
     }
@@ -54,11 +54,11 @@ public class Order {
     }
 
     public OrderStatus getOrderStatus() {
-        return orderStatus;
+        return status;
     }
 
     public void setOrderStatus(OrderStatus orderStatus) {
-        this.orderStatus = orderStatus;
+        this.status = orderStatus;
     }
 
     public User getClient() {
@@ -75,5 +75,18 @@ public class Order {
 
     public void setPayment(Payment payment) {
         this.payment = payment;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Order order = (Order) o;
+        return id == order.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
     }
 }

@@ -3,6 +3,7 @@ package br.com.klsys.dscommerce.entities;
 import jakarta.persistence.*;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 @Entity
 @Table(name = "tb_product")
@@ -81,5 +82,18 @@ public class Product {
 
     public Set<Category> getCategories() {
         return categories;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Product product = (Product) o;
+        return Objects.equals(id, product.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id);
     }
 }
