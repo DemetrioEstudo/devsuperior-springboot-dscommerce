@@ -1,196 +1,288 @@
 # DSCommerce
 
-Resumo rápido: aplicação backend em Java + Spring Boot para um projeto de e-commerce (exemplo didático).
+Sistema backend de e-commerce desenvolvido com Java e Spring Boot para fins didáticos.
 
-## Arquivo
-`README.md`
+---
 
-## Tecnologias
+## 📌 Sobre o Projeto
+
+API REST para gerenciamento de produtos, categorias, usuários, pedidos e pagamentos de uma loja virtual.
+
+**Status:** Em desenvolvimento  
+**Funcionalidade atual:** Busca de produtos por ID
+
+---
+
+## 🛠️ Tecnologias
+
+| Tecnologia | Versão | Descrição |
+|------------|--------|-----------|
+| Java | 21 | Linguagem principal |
+| Spring Boot | 3.5.8 | Framework web |
+| Spring Data JPA | - | Persistência de dados |
+| Hibernate | 6 | ORM (mapeamento objeto-relacional) |
+| H2 Database | - | Banco em memória (perfil test) |
+| Maven | - | Gerenciamento de dependências |
+
+---
+
+## 🗄️ Banco de Dados
+
+### Modelo de Domínio
+
+```
+User ──1:N─→ Order ──1:1─→ Payment
+              │
+              └──1:N─→ OrderItem ←─N:1── Product ←─N:N─→ Category
+```
+
+### Entidades
+
+| Entidade | Descrição | Atributos Principais |
+|----------|-----------|---------------------|
+| **Product** | Produtos à venda | id, name, description, price, imgUrl |
+| **Category** | Categorias de produtos | id, name |
+| **User** | Usuários/clientes | id, name, email, phone, birthDate |
+| **Order** | Pedidos realizados | id, moment, status, client (User) |
+| **OrderItem** | Itens do pedido | quantity, price, order, product |
+| **Payment** | Pagamento do pedido | id, moment, order |
+| **OrderStatus** | Status do pedido | WAITING_PAYMENT, PAID, SHIPPED, DELIVERED, CANCELED |
+
+### Relacionamentos JPA
+
+**1:1 (One-to-One)** - Order → Payment
+```java
+// Order.java
+@OneToOne(mappedBy = "order", cascade = CascadeType.ALL)
+private Payment payment;
+```
+
+**1:N (One-to-Many)** - User → Order
+```java
+// User.java
+@OneToMany(mappedBy = "client")
+private List<Order> orders;
+
+// Order.java
+@ManyToOne
+@JoinColumn(name = "client_id")
+private User client;
+```
+
+**N:N (Many-to-Many)** - Product ↔ Category
+```java
+// Product.java
+@ManyToMany
+@JoinTable(name = "tb_product_category",
+    joinColumns = @JoinColumn(name = "product_id"),
+    inverseJoinColumns = @JoinColumn(name = "category_id"))
+private Set<Category> categories;
+```
+
+**N:N com atributos extras** - Order ↔ Product (via OrderItem)
+```java
+// OrderItem.java - classe associativa
+@EmbeddedId
+private OrderItemPk id; // chave composta (order + product)
+private Integer quantity;
+private Double price;
+```
+
+### Configuração H2
+
+**Arquivo:** `application-test.properties`
+```properties
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.username=sa
+spring.datasource.password=
+spring.h2.console.enabled=true
+spring.jpa.hibernate.ddl-auto=update
+```
+
+**Console H2:** http://localhost:8080/h2-console
+
+---
+
+## 🏗️ Arquitetura em Camadas
+
+```
+Cliente HTTP → Controller → Service → Repository → Banco de Dados
+                   ↓           ↓          ↓
+                  DTO   ←    Entity ←  JPA/SQL
+```
+
+### 1️⃣ Repository (Acesso a Dados)
+
+**Função:** Interface para operações no banco  
+**Tecnologia:** Spring Data JPA
+
+```java
+public interface ProductRepository extends JpaRepository<Product, Long> {
+    // Métodos herdados: findById, findAll, save, delete
+}
+```
+
+### 2️⃣ Service (Lógica de Negócio)
+
+**Função:** Regras de negócio, transações, conversões  
+**Tecnologia:** Spring `@Service` + `@Transactional`
+
+```java
+@Service
+public class ProductService {
+    @Autowired
+    private ProductRepository repository;
+
+    @Transactional(readOnly = true)
+    public ProductDTO findById(Long id) {
+        Product product = repository.findById(id).get();
+        return new ProductDTO(product);
+    }
+}
+```
+
+**Boas práticas:**
+- `@Transactional(readOnly = true)` para leitura
+- `@Transactional` para escrita
+- Retornar sempre DTOs, nunca Entities
+
+### 3️⃣ Controller (API REST)
+
+**Função:** Expor endpoints HTTP  
+**Tecnologia:** Spring `@RestController`
+
+```java
+@RestController
+@RequestMapping("/products")
+public class ProductController {
+    @Autowired
+    private ProductService service;
+
+    @GetMapping("/{id}")
+    public ProductDTO findById(@PathVariable Long id) {
+        return service.findById(id);
+    }
+}
+```
+
+**Endpoints disponíveis:**
+- `GET /products/{id}` - Buscar produto por ID
+
+### 4️⃣ DTO (Transferência de Dados)
+
+**Função:** Objeto para trafegar dados entre camadas  
+**Por quê?** Não expor entidades JPA (segurança + performance)
+
+```java
+public class ProductDTO {
+    private Long id;
+    private String name;
+    private String description;
+    private Double price;
+    private String imgUrl;
+
+    public ProductDTO(Product entity) {
+        this.id = entity.getId();
+        this.name = entity.getName();
+        this.description = entity.getDescription();
+        this.price = entity.getPrice();
+        this.imgUrl = entity.getImgUrl();
+    }
+}
+```
+
+### Fluxo Completo
+
+```
+1. GET /products/2
+2. ProductController.findById(2)
+3. ProductService.findById(2)
+4. ProductRepository.findById(2) → SQL
+5. Retorna Product (entity)
+6. Converte para ProductDTO
+7. Retorna JSON ao cliente
+```
+
+---
+
+## 🚀 Como Executar
+
+### Pré-requisitos
 - Java 21
-- Spring Boot 3.5.8
-- Spring Data JPA / Hibernate 6
-- H2 (banco em memória para profile `test`)
-- Maven
-- Jakarta Persistence API
-- Embedded Tomcat (via Spring Boot)
-- IDE recomendada: IntelliJ IDEA
+- Maven (ou usar o wrapper `mvnw.cmd`)
 
-## Estrutura do projeto
-- `src/main/java` — código-fonte (pacote `br.com.klsys.dscommerce`)
-- `src/main/resources` — arquivos de configuração (`application.properties`, profiles)
-- `pom.xml` — dependências e build
+### Execução
 
-## Pré-requisitos (Windows)
-- Java 21 instalado e configurado no `PATH`
-- Maven ou usar Maven Wrapper (`mvnw.cmd`)
+**Opção 1: Maven Wrapper (recomendado)**
+```bash
+mvnw.cmd spring-boot:run
+```
 
-## Como executar (Windows)
-1. Pelo Maven Wrapper (recomendado):
-    - Rodar direto:  
-      `mvnw.cmd spring-boot:run`
-    - Ou empacotar e executar jar:  
-      `mvnw.cmd clean package`  
-      `java -jar target\dscommerce-*.jar --spring.profiles.active=test`
+**Opção 2: Maven**
+```bash
+mvn spring-boot:run
+```
 
-2. Pelo Maven (se não usar wrapper):
-    - `mvn spring-boot:run`
+**Opção 3: IntelliJ IDEA**
+- Executar classe `DscommerceApplication.java`
 
-3. Pela IDE (IntelliJ):
-    - Executar a classe `br.com.klsys.dscommerce.DscommerceApplication` (Run).
+### Testar API
 
-## Perfil e banco H2
-- O projeto ativa `spring.profiles.active=test` em `src/main/resources/application.properties`.
-- Confirme que existe `src/main/resources/application-test.properties` (nome exato `application-test.properties`) com configurações do H2; exemplo mínimo recomendado:
-  ```properties
-  spring.datasource.url=jdbc:h2:mem:testdb
-  spring.datasource.username=sa
-  spring.datasource.password=
-  spring.h2.console.enabled=true
-  spring.jpa.hibernate.ddl-auto=update
-  ```
+```bash
+GET http://localhost:8080/products/1
+GET http://localhost:8080/products/2
+```
+
+**Resposta esperada:**
+```json
+{
+  "id": 1,
+  "name": "The Lord of the Rings",
+  "description": "Lorem ipsum...",
+  "price": 90.5,
+  "imgUrl": "https://..."
+}
+```
 
 ---
 
-## 📚 Relacionamentos JPA
+## 📁 Estrutura de Arquivos
 
-### ✅ 1. One-to-One (1:1)
-**Use quando cada entidade só pode ter uma do outro lado.**
-
-**Exemplo do projeto:**
-- **Order ↔ Payment** (um pedido tem um único pagamento e um pagamento pertence a um único pedido)
-  ```java
-  // Em Order.java
-  @OneToOne(mappedBy = "order", cascade = CascadeType.ALL)
-  private Payment payment;
-  
-  // Em Payment.java
-  @OneToOne
-  @MapsId  // Payment usa o mesmo ID do Order
-  private Order order;
-  ```
-
-📌 **Se puder ter mais de um → não é 1:1, é 1:N.**
-
----
-
-### ✅ 2. One-to-Many / Many-to-One (1:N)
-**É o mais comum. Um lado tem vários; o outro tem apenas um.**
-
-**Exemplo do projeto:**
-- **User ↔ Order** (um usuário pode ter vários pedidos, mas cada pedido pertence a um único usuário)
-  ```java
-  // Em User.java (lado One - tem vários)
-  @OneToMany(mappedBy = "client")
-  private List<Order> orders = new ArrayList<>();
-  
-  // Em Order.java (lado Many - tem apenas um)
-  @ManyToOne
-  @JoinColumn(name = "client_id")  // FK fica aqui no lado Many
-  private User client;
-  ```
-
-📌 **A FK (Foreign Key) sempre fica no lado Many (Order).**
+```
+dscommerce/
+├── src/main/java/br/com/klsys/dscommerce/
+│   ├── controllers/          # Endpoints REST
+│   │   └── ProductController.java
+│   ├── services/             # Lógica de negócio
+│   │   └── ProductService.java
+│   ├── repositories/         # Acesso a dados
+│   │   └── ProductRepository.java
+│   ├── entities/             # Entidades JPA
+│   │   ├── Product.java
+│   │   ├── Category.java
+│   │   ├── User.java
+│   │   ├── Order.java
+│   │   ├── OrderItem.java
+│   │   ├── OrderItemPk.java
+│   │   ├── Payment.java
+│   │   └── OrderStatus.java
+│   └── dto/                  # Data Transfer Objects
+│       └── ProductDTO.java
+├── src/main/resources/
+│   ├── application.properties
+│   ├── application-test.properties
+│   └── import.sql            # Dados iniciais
+└── pom.xml
+```
 
 ---
 
-### ✅ 3. Many-to-Many (N:N) simples
-**Use somente quando a tabela intermediária não tem nenhuma coluna extra.**
+## 📝 Próximos Passos
 
-**Exemplo do projeto:**
-- **Product ↔ Category** (um produto pode ter várias categorias e uma categoria pode ter vários produtos)
-  ```java
-  // Em Product.java (lado proprietário - define a tabela intermediária)
-  @ManyToMany
-  @JoinTable(
-      name = "tb_product_category",
-      joinColumns = @JoinColumn(name = "product_id"),
-      inverseJoinColumns = @JoinColumn(name = "category_id")
-  )
-  private Set<Category> categories = new HashSet<>();
-  
-  // Em Category.java (lado inverso)
-  @ManyToMany(mappedBy = "categories")
-  private Set<Product> products = new HashSet<>();
-  ```
-
-📌 **Se for só ligação (sem dados extras), pode usar @ManyToMany.**
-
----
-
-### ❌ 4. Many-to-Many real (com dados extras) → classe de associação
-**Quando o relacionamento precisa de atributos, NÃO é N:N técnico.**
-
-**Exemplo real do projeto:**
-- **Order ↔ Product** através de **OrdemItem** → precisa de `quantity` (quantidade) e `price` (preço unitário)
-
-**Solução implementada no projeto:**
-
-1. **Chave composta (OrderItemPk.java):**
-   ```java
-   @Embeddable
-   public class OrderItemPk {
-       @ManyToOne
-       @JoinColumn(name = "order_id")
-       private Order order;
-       
-       @ManyToOne
-       @JoinColumn(name = "product_id")
-       private Product product;
-   }
-   ```
-
-2. **Entidade de associação (OrdemItem.java):**
-   ```java
-   @Entity
-   @Table(name = "tb_order_item")
-   public class OrdemItem {
-       @EmbeddedId
-       private OrderItemPk id = new OrderItemPk();
-       
-       private Integer quantity;  // dado extra
-       private Double price;      // dado extra
-       
-       // Métodos auxiliares para acessar order e product
-       public Order getOrder() {
-           return id.getOrder();
-       }
-       
-       public Product getProduct() {
-           return id.getProduct();
-       }
-   }
-   ```
-
-3. **Referência nas entidades principais:**
-   ```java
-   // Em Order.java
-   @OneToMany(mappedBy = "id.order")
-   private Set<OrdemItem> items = new HashSet<>();
-   
-   // Em Product.java
-   @OneToMany(mappedBy = "id.product")
-   private Set<OrdemItem> items = new HashSet<>();
-   ```
-
-📌 **Cria-se uma entidade própria (OrdemItem) com:**
-- Chave composta embutida (`@EmbeddedId`)
-- Duas relações `@ManyToOne` dentro da chave (order e product)
-- Atributos extras (quantity, price)
-
----
-
-### 🎯 REGRA DE OURO (a única que você precisa lembrar)
-
-> **👉 Se o relacionamento tiver dados extras → NÃO é ManyToMany.**  
-> **Use uma entidade associativa com duas relações ManyToOne.**
-
----
-
-### 🎯 Tabela de Decisão - Regra simples para escolher:
-
-| Situação | Tipo |
-|----------|------|
-| Só 1 do outro lado | **1:1** |
-| 1 tem vários | **1:N + N:1** |
-| Ambos têm vários, sem atributos extras | **N:N simples** (`@ManyToMany`) |
-| Ambos têm vários, com atributos extras | **Classe de associação** (N:N real) |
+- [ ] Implementar CRUD completo (POST, PUT, DELETE)
+- [ ] Tratamento de exceções (`@ControllerAdvice`)
+- [ ] Validação de dados (`@Valid`)
+- [ ] Paginação de resultados
+- [ ] Documentação Swagger
+- [ ] Testes unitários e de integração
+- [ ] Deploy em produção (PostgreSQL)
