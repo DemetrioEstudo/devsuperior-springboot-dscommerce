@@ -9,7 +9,9 @@ Sistema backend de e-commerce desenvolvido com Java e Spring Boot para fins did�
 API REST para gerenciamento de produtos, categorias, usuários, pedidos e pagamentos de uma loja virtual.
 
 **Status:** Em desenvolvimento  
-**Funcionalidade atual:** Busca de produtos por ID
+**Funcionalidades atuais:** 
+- Busca de produtos por ID
+- Listagem paginada de produtos
 
 ---
 
@@ -135,8 +137,18 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public ProductDTO findById(Long id) {
-        Product product = repository.findById(id).get();
-        return new ProductDTO(product);
+        //Lógica para buscar o produto no banco de dados (simulada aqui)
+        Optional<Product> result = repository.findById(id);
+        Product product = result.get();
+        ProductDTO dto = new ProductDTO(product);
+        return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProductDTO> findAll(Pageable pageable) {
+        //Lógica para buscar o produto no banco de dados (simulada aqui)
+        Page<Product> result = repository.findAll(pageable);
+        return result.map(x -> new ProductDTO(x));
     }
 }
 ```
@@ -153,20 +165,26 @@ public class ProductService {
 
 ```java
 @RestController
-@RequestMapping("/products")
+@RequestMapping(value="/products")
 public class ProductController {
     @Autowired
     private ProductService service;
 
-    @GetMapping("/{id}")
-    public ProductDTO findById(@PathVariable Long id) {
+    @GetMapping(value = "/{id}")
+    public ProductDTO findById(@PathVariable Long id){
         return service.findById(id);
+    }
+
+    @GetMapping
+    public Page<ProductDTO> findAll(Pageable pageable){
+        return service.findAll(pageable);
     }
 }
 ```
 
 **Endpoints disponíveis:**
 - `GET /products/{id}` - Buscar produto por ID
+- `GET /products` - Listar todos os produtos (com paginação)
 
 ### 4️⃣ DTO (Transferência de Dados)
 
@@ -193,6 +211,7 @@ public class ProductDTO {
 
 ### Fluxo Completo
 
+**Exemplo 1: Buscar por ID**
 ```
 1. GET /products/2
 2. ProductController.findById(2)
@@ -201,6 +220,17 @@ public class ProductDTO {
 5. Retorna Product (entity)
 6. Converte para ProductDTO
 7. Retorna JSON ao cliente
+```
+
+**Exemplo 2: Listar com paginação**
+```
+1. GET /products?page=0&size=10
+2. ProductController.findAll(Pageable)
+3. ProductService.findAll(Pageable)
+4. ProductRepository.findAll(Pageable) → SQL
+5. Retorna Page<Product> (entities)
+6. Converte para Page<ProductDTO> usando map
+7. Retorna JSON paginado ao cliente
 ```
 
 ---
@@ -228,6 +258,7 @@ mvn spring-boot:run
 
 ### Testar API
 
+**Buscar produto por ID:**
 ```bash
 GET http://localhost:8080/products/1
 GET http://localhost:8080/products/2
@@ -241,6 +272,44 @@ GET http://localhost:8080/products/2
   "description": "Lorem ipsum...",
   "price": 90.5,
   "imgUrl": "https://..."
+}
+```
+
+**Listar produtos (paginado):**
+```bash
+GET http://localhost:8080/products
+GET http://localhost:8080/products?page=0&size=5
+GET http://localhost:8080/products?page=0&size=10&sort=name,asc
+GET http://localhost:8080/products?page=1&size=10&sort=price,desc
+```
+
+**Parâmetros de paginação:**
+- `page` - Número da página (inicia em 0)
+- `size` - Quantidade de itens por página (padrão: 20)
+- `sort` - Ordenação (ex: `name,asc` ou `price,desc`)
+
+**Resposta esperada (paginada):**
+```json
+{
+  "content": [
+    {
+      "id": 1,
+      "name": "The Lord of the Rings",
+      "description": "Lorem ipsum...",
+      "price": 90.5,
+      "imgUrl": "https://..."
+    }
+  ],
+  "pageable": {
+    "pageNumber": 0,
+    "pageSize": 20
+  },
+  "totalPages": 1,
+  "totalElements": 25,
+  "last": true,
+  "first": true,
+  "numberOfElements": 25,
+  "empty": false
 }
 ```
 
@@ -282,7 +351,7 @@ dscommerce/
 - [ ] Implementar CRUD completo (POST, PUT, DELETE)
 - [ ] Tratamento de exceções (`@ControllerAdvice`)
 - [ ] Validação de dados (`@Valid`)
-- [ ] Paginação de resultados
+- [x] Paginação de resultados
 - [ ] Documentação Swagger
 - [ ] Testes unitários e de integração
 - [ ] Deploy em produção (PostgreSQL)
