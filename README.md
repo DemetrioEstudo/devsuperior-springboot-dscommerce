@@ -6,16 +6,16 @@ API REST de e-commerce desenvolvida com Java e Spring Boot.
 
 ## 📝 Atualizações Recentes
 
-### ✅ Último Commit - Implementação de Insert Product
-- ✅ Adicionado endpoint `POST /products` para inserir novos produtos
-- ✅ Implementado método `insert()` no `ProductService`
-- ✅ Refatorado `ProductController` para retornar `ResponseEntity` com status HTTP adequados
-- ✅ Adicionado header `Location` na resposta do POST (RFC 7231)
+### ✅ Última Implementação - CRUD Completo de Products
+- ✅ Implementado endpoint `PUT /products/{id}` para atualizar produtos existentes
+- ✅ Implementado método `update(Long id, ProductDTO dto)` no `ProductService`
+- ✅ Utilizado `getReferenceById()` para melhor performance (evita SELECT desnecessário)
+- ✅ Todos os 4 endpoints principais de Product implementados: GET (ID), GET (All), POST, PUT
 
-### 🔄 Alterações Não Commitadas
-- 🔄 Aprimorado todos os endpoints GET para retornar `ResponseEntity`
-- 🔄 Adicionado construção de URI para recurso criado no POST
-- 🔄 Padronização de respostas HTTP em todos os endpoints
+### 🔄 Alterações Anteriores
+- ✅ Endpoint `POST /products` com header `Location` (RFC 7231)
+- ✅ Paginação completa em `GET /products`
+- ✅ Padronização de respostas HTTP com `ResponseEntity` em todos os endpoints
 
 ---
 
@@ -27,6 +27,7 @@ Sistema backend para gerenciamento de produtos, categorias, usuários, pedidos e
 - ✅ Buscar produto por ID
 - ✅ Listar produtos (paginado)
 - ✅ Inserir novo produto
+- ✅ Atualizar produto existente
 
 ---
 
@@ -127,6 +128,18 @@ public class ProductService {
         entity = repository.save(entity);
         return new ProductDTO(entity);
     }
+
+    @Transactional
+    public ProductDTO update(Long id, ProductDTO dto) {
+        Product entity = repository.getReferenceById(id);
+        entity.setName(dto.getName());
+        entity.setDescription(dto.getDescription());
+        entity.setPrice(dto.getPrice());
+        entity.setImgUrl(dto.getImgUrl());
+        
+        entity = repository.save(entity);
+        return new ProductDTO(entity);
+    }
 }
 ```
 
@@ -169,6 +182,12 @@ public class ProductController {
                 .toUri();
         return ResponseEntity.created(uri).body(dto);
     }
+
+    @PutMapping(value = "/{id}")
+    public ResponseEntity<ProductDTO> update(@PathVariable Long id, @RequestBody ProductDTO dto) {
+        dto = service.update(id, dto);
+        return ResponseEntity.ok().body(dto);
+    }
 }
 ```
 
@@ -176,6 +195,7 @@ public class ProductController {
 - `GET /products/{id}` - Buscar produto por ID (Status: 200 OK)
 - `GET /products` - Listar todos os produtos com paginação (Status: 200 OK)
 - `POST /products` - Inserir novo produto (Status: 201 Created + Location header)
+- `PUT /products/{id}` - Atualizar produto existente (Status: 200 OK)
 
 ---
 
@@ -348,6 +368,34 @@ Location: http://localhost:8080/products/26
 
 ---
 
+### 4. Atualizar produto existente
+
+**Request:**
+```http
+PUT http://localhost:8080/products/1
+Content-Type: application/json
+
+{
+  "name": "The Lord of the Rings - Edição Especial",
+  "description": "Edição especial com ilustrações exclusivas",
+  "price": 120.00,
+  "imgUrl": "https://raw.githubusercontent.com/devsuperior/dscatalog-resources/master/backend/img/1-big.jpg"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": 1,
+  "name": "The Lord of the Rings - Edição Especial",
+  "description": "Edição especial com ilustrações exclusivas",
+  "price": 120.00,
+  "imgUrl": "https://raw.githubusercontent.com/devsuperior/dscatalog-resources/master/backend/img/1-big.jpg"
+}
+```
+
+---
+
 ## 📁 Estrutura de Arquivos
 
 ```
@@ -381,7 +429,6 @@ dscommerce/
 
 ## 📝 Próximos Passos
 
-- [ ] Implementar UPDATE (PUT) de produtos
 - [ ] Implementar DELETE de produtos
 - [ ] Tratamento de exceções (`@ControllerAdvice`)
 - [ ] Validação de dados (`@Valid`, Bean Validation)
