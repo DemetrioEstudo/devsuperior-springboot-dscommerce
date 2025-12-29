@@ -7,12 +7,13 @@ API REST de e-commerce desenvolvida com Java e Spring Boot.
 ## 📝 Atualizações Recentes
 
 ### ✅ Última Implementação - CRUD Completo de Products
-- ✅ Implementado endpoint `PUT /products/{id}` para atualizar produtos existentes
-- ✅ Implementado método `update(Long id, ProductDTO dto)` no `ProductService`
-- ✅ Utilizado `getReferenceById()` para melhor performance (evita SELECT desnecessário)
-- ✅ Todos os 4 endpoints principais de Product implementados: GET (ID), GET (All), POST, PUT
+- ✅ Implementado endpoint `DELETE /products/{id}` para deletar produtos
+- ✅ Implementado método `delete(Long id)` no `ProductService`
+- ✅ Retorno `204 No Content` conforme boas práticas REST
+- ✅ **CRUD 100% completo**: GET (ID), GET (All), POST, PUT, DELETE
 
 ### 🔄 Alterações Anteriores
+- ✅ Endpoint `PUT /products/{id}` com `getReferenceById()` para melhor performance
 - ✅ Endpoint `POST /products` com header `Location` (RFC 7231)
 - ✅ Paginação completa em `GET /products`
 - ✅ Padronização de respostas HTTP com `ResponseEntity` em todos os endpoints
@@ -28,6 +29,7 @@ Sistema backend para gerenciamento de produtos, categorias, usuários, pedidos e
 - ✅ Listar produtos (paginado)
 - ✅ Inserir novo produto
 - ✅ Atualizar produto existente
+- ✅ Deletar produto
 
 ---
 
@@ -140,6 +142,11 @@ public class ProductService {
         entity = repository.save(entity);
         return new ProductDTO(entity);
     }
+
+    @Transactional
+    public void delete(Long id) {
+        repository.deleteById(id);
+    }
 }
 ```
 
@@ -188,6 +195,12 @@ public class ProductController {
         dto = service.update(id, dto);
         return ResponseEntity.ok().body(dto);
     }
+
+    @DeleteMapping(value = "/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }
 ```
 
@@ -196,6 +209,7 @@ public class ProductController {
 - `GET /products` - Listar todos os produtos com paginação (Status: 200 OK)
 - `POST /products` - Inserir novo produto (Status: 201 Created + Location header)
 - `PUT /products/{id}` - Atualizar produto existente (Status: 200 OK)
+- `DELETE /products/{id}` - Deletar produto (Status: 204 No Content)
 
 ---
 
@@ -396,6 +410,25 @@ Content-Type: application/json
 
 ---
 
+### 5. Deletar produto
+
+**Request:**
+```http
+DELETE http://localhost:8080/products/1
+```
+
+**Response:** `204 No Content`
+```
+(Sem corpo de resposta)
+```
+
+**Observações:**
+- Status `204 No Content` indica que a operação foi bem-sucedida
+- Não há corpo na resposta, apenas o status HTTP
+- Após deletar, uma requisição `GET /products/1` retornará erro 500 (até implementar tratamento de exceções)
+
+---
+
 ## 📁 Estrutura de Arquivos
 
 ```
@@ -429,9 +462,11 @@ dscommerce/
 
 ## 📝 Próximos Passos
 
-- [ ] Implementar DELETE de produtos
-- [ ] Tratamento de exceções (`@ControllerAdvice`)
+- [ ] Tratamento de exceções (`@ControllerAdvice`) - **Prioridade Alta**
+  - Evitar erro 500 ao buscar/atualizar/deletar IDs inexistentes
+  - Retornar 404 Not Found em vez de 500 Internal Server Error
 - [ ] Validação de dados (`@Valid`, Bean Validation)
 - [ ] Documentação Swagger/OpenAPI
 - [ ] Testes unitários e de integração
+- [ ] Implementar endpoints para Category, User, Order
 - [ ] Deploy em produção (PostgreSQL)
