@@ -1,16 +1,16 @@
 package br.com.klsys.dscommerce.services;
 
-
 import br.com.klsys.dscommerce.dto.ProductDTO;
 import br.com.klsys.dscommerce.entities.Product;
 import br.com.klsys.dscommerce.repositories.ProductRepository;
+import br.com.klsys.dscommerce.services.exceptions.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+
 import java.util.Optional;
 
 @Service
@@ -21,11 +21,9 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public ProductDTO findById(Long id) {
-         //Lógica para buscar o produto no banco de dados (simulada aqui)
-        Optional<Product> result = repository.findById(id);
-        Product product = result.get();
-        ProductDTO dto = new ProductDTO(product);
-        return dto;
+        Product product = repository.findById(id).orElseThrow(
+                ()-> new ResourceNotFoundException("Recurso nâo encontrado"));
+        return new ProductDTO(product);
     }
 
     @Transactional(readOnly = true)
