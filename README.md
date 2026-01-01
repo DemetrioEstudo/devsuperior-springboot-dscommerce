@@ -66,30 +66,59 @@ dscommerce/
 
 | Tecnologia | Versão | Descrição |
 |------------|--------|-----------|
-| Java | 21 | Linguagem de programação |
-| Spring Boot | 3.5.8 | Framework para aplicações Java |
-| Spring Data JPA | - | Abstração de persistência de dados |
-| Spring Web | - | Desenvolvimento de APIs REST |
-| H2 Database | - | Banco de dados em memória (desenvolvimento) |
-| Maven | - | Gerenciador de dependências |
+| Java | 17 | Linguagem de programação |
+| Spring Boot | 3.4.1 | Framework para aplicações Java |
+| Spring Data JPA | 3.4.1 | Abstração de persistência de dados com Hibernate |
+| Spring Web | 3.4.1 | Desenvolvimento de APIs REST |
+| Spring Validation | 3.4.1 | Validação de dados com Bean Validation |
+| H2 Database | runtime | Banco de dados em memória (desenvolvimento) |
+| Maven | 4.0.0 | Gerenciador de dependências e build |
 
 **Dependências principais:**
 ```xml
 <dependencies>
+    <!-- Spring Data JPA -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-data-jpa</artifactId>
     </dependency>
+    
+    <!-- Spring Web (REST API) -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
+    
+    <!-- Bean Validation -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    
+    <!-- H2 Database -->
     <dependency>
         <groupId>com.h2database</groupId>
         <artifactId>h2</artifactId>
         <scope>runtime</scope>
     </dependency>
+    
+    <!-- Spring Test -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
 </dependencies>
+```
+
+**Parent POM:**
+```xml
+<parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.4.1</version>
+    <relativePath/>
+</parent>
 ```
 
 ---
@@ -97,7 +126,7 @@ dscommerce/
 ## 🚀 Como Executar
 
 ### Pré-requisitos
-- ☕ Java 21 instalado
+- ☕ Java 17 ou superior instalado
 - 📦 Maven instalado (ou usar o wrapper `mvnw`)
 - 🔧 IDE (IntelliJ IDEA, Eclipse, VS Code)
 
