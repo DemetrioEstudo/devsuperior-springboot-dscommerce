@@ -813,19 +813,28 @@ Classes para transferência de dados entre camadas, evitando exposição de enti
 ### ProductDTO
 
 ```java
+package br.com.klsys.dscommerce.dto;
+
+import br.com.klsys.dscommerce.entities.Product;
+import jakarta.validation.constraints.*;
+
 public class ProductDTO {
     private Long id;
+    
+    @NotBlank(message = "Nome não pode estar em branco")
+    @Size(min = 3, max = 80, message = "Nome deve ter entre 3 e 80 caracteres")
     private String name;
+    
+    @NotBlank(message = "Descrição não pode estar em branco")
+    @Size(min = 10, message = "Descrição precisa ter no mínimo 10 caracteres")
     private String description;
+    
+    @Positive(message = "O preço deve ser um valor positivo")
     private Double price;
+    
     private String imgUrl;
 
-    public ProductDTO(Long id, String name, String description, Double price, String imgUrl) {
-        this.id = id;
-        this.name = name;
-        this.description = description;
-        this.price = price;
-        this.imgUrl = imgUrl;
+    public ProductDTO() {
     }
 
     public ProductDTO(Product entity) {
@@ -836,9 +845,25 @@ public class ProductDTO {
         this.imgUrl = entity.getImgUrl();
     }
     
-    // Getters e Setters
+    // Getters
+    public Long getId() { return id; }
+    public String getName() { return name; }
+    public String getDescription() { return description; }
+    public Double getPrice() { return price; }
+    public String getImgUrl() { return imgUrl; }
 }
 ```
+
+**Validações aplicadas:**
+
+| Campo | Validação | Regra |
+|-------|-----------|-------|
+| `name` | `@NotBlank` `@Size` | Obrigatório, 3-80 caracteres |
+| `description` | `@NotBlank` `@Size` | Obrigatório, mínimo 10 caracteres |
+| `price` | `@Positive` | Deve ser positivo |
+| `imgUrl` | - | Opcional |
+
+---
 
 ### CustomError
 
@@ -860,6 +885,56 @@ public class CustomError {
 }
 ```
 
+---
+
+### ValidationError
+
+```java
+public class ValidationError extends CustomError {
+
+    private List<FieldMessage> errors = new ArrayList<>();
+
+    public ValidationError(Instant timestamp, Integer status, String error, String path) {
+        super(timestamp, status, error, path);
+    }
+
+    public List<FieldMessage> getErrors() {
+        return errors;
+    }
+
+    public void addError(String fieldName, String message) {
+        errors.add(new FieldMessage(fieldName, message));
+    }
+}
+```
+
+---
+
+### FieldMessage
+
+```java
+public class FieldMessage {
+
+    private String fieldName;
+    private String message;
+
+    public FieldMessage(String fieldName, String message) {
+        this.fieldName = fieldName;
+        this.message = message;
+    }
+
+    public String getFieldName() {
+        return fieldName;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+}
+```
+
+---
+
 ### Vantagens dos DTOs
 
 | Vantagem | Descrição |
@@ -869,6 +944,176 @@ public class CustomError {
 | **Flexibilidade** | Permite diferentes representações da mesma entidade |
 | **Desacoplamento** | Mudanças na entidade não afetam a API |
 | **Evita Lazy Loading** | Previne exceções de sessão fechada |
+| **Validação** | Centraliza regras de validação de entrada |
+
+---
+
+## ✅ Bean Validation (Validação de Dados)
+
+### O que é Bean Validation?
+
+Bean Validation é uma especificação Java para validar dados usando anotações. No Spring Boot, a implementação padrão é o **Hibernate Validator**.
+
+**Benefícios:**
+- ✅ Valida dados antes da lógica de negócio
+- ✅ Centraliza regras de validação
+- ✅ Reduz código boilerplate
+- ✅ Retorna mensagens amigáveis ao usuário
+- ✅ Previne dados inválidos no banco
+
+---
+
+### Dependência
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-validation</artifactId>
+</dependency>
+```
+
+---
+
+### Como Usar no Controller
+
+Para ativar a validação, use `@Valid` nos parâmetros do controller:
+
+```java
+@PostMapping
+public ResponseEntity<ProductDTO> insert(@Valid @RequestBody ProductDTO dto) {
+    dto = service.insert(dto);
+    URI uri = ServletUriComponentsBuilder.fromCurrentRequest()
+            .path("/{id}")
+            .buildAndExpand(dto.getId())
+            .toUri();
+    return ResponseEntity.created(uri).body(dto);
+}
+
+@PutMapping("/{id}")
+public ResponseEntity<ProductDTO> update(
+        @PathVariable Long id,
+        @Valid @RequestBody ProductDTO dto) {
+    dto = service.update(id, dto);
+    return ResponseEntity.ok(dto);
+}
+```
+
+**Observação:** `@Valid` aciona automaticamente as validações definidas no DTO.
+
+---
+
+### Anotações de Validação Usadas
+
+| Anotação | Aplicação | Descrição |
+|----------|-----------|-----------|
+| `@NotBlank` | `name`, `description` | Não permite valores vazios ou apenas espaços |
+| `@Size` | `name`, `description` | Define tamanho mínimo e máximo |
+| `@Positive` | `price` | Garante que o valor seja positivo |
+
+---
+
+### Tratamento de Erros de Validação
+
+O `ControllerExceptionHandler` intercepta erros de validação:
+
+```java
+@ExceptionHandler(MethodArgumentNotValidException.class)
+public ResponseEntity<CustomError> methodArgumentNotValidation(
+        MethodArgumentNotValidException e, 
+        HttpServletRequest request) {
+    
+    HttpStatus status = HttpStatus.UNPROCESSABLE_ENTITY;
+    ValidationError err = new ValidationError(
+        Instant.now(), 
+        status.value(), 
+        "Dados inválidos", 
+        request.getRequestURI()
+    );
+    
+    for (FieldError f : e.getBindingResult().getFieldErrors()) {
+        err.addError(f.getField(), f.getDefaultMessage());
+    }
+    
+    return ResponseEntity.status(status).body(err);
+}
+```
+
+---
+
+### Exemplo de Resposta de Validação
+
+**Request (dados inválidos):**
+```http
+POST http://localhost:8080/products
+Content-Type: application/json
+
+{
+  "name": "",
+  "description": "Curta",
+  "price": -10.0,
+  "imgUrl": "http://img.jpg"
+}
+```
+
+**Response (422 Unprocessable Entity):**
+```json
+{
+  "timestamp": "2026-01-01T10:30:00.123456Z",
+  "status": 422,
+  "error": "Dados inválidos",
+  "path": "/products",
+  "errors": [
+    {
+      "fieldName": "name",
+      "message": "Nome não pode estar em branco"
+    },
+    {
+      "fieldName": "description",
+      "message": "Descrição precisa ter no mínimo 10 caracteres"
+    },
+    {
+      "fieldName": "price",
+      "message": "O preço deve ser um valor positivo"
+    }
+  ]
+}
+```
+
+---
+
+### Mensagens Personalizadas
+
+Todas as mensagens são **amigáveis** e **descritivas**:
+
+```java
+// ✅ BOM - Mensagens claras
+@NotBlank(message = "Nome não pode estar em branco")
+@Size(min = 3, max = 80, message = "Nome deve ter entre 3 e 80 caracteres")
+
+// ❌ EVITAR - Mensagens genéricas
+@NotBlank(message = "Campo obrigatório")
+@Size(min = 3, max = 80, message = "Tamanho inválido")
+```
+
+**Vantagens das mensagens amigáveis:**
+- Usuário sabe exatamente o que corrigir
+- Especifica limites/regras claros
+- Melhora experiência do desenvolvedor frontend
+- Reduz suporte e dúvidas
+
+---
+
+### Principais Anotações Bean Validation
+
+| Categoria | Anotações | Exemplo de Uso |
+|-----------|-----------|----------------|
+| **Obrigatório** | `@NotNull`, `@NotBlank`, `@NotEmpty` | Campos não podem ser nulos/vazios |
+| **Tamanho** | `@Size`, `@Length` | `@Size(min=3, max=80)` |
+| **Numéricos** | `@Min`, `@Max`, `@Positive`, `@Negative` | `@Positive` |
+| **Formato** | `@Email`, `@Pattern`, `@URL` | `@Email(message="Email inválido")` |
+| **Datas** | `@Past`, `@Future`, `@PastOrPresent` | `@Past` para data de nascimento |
+
+📚 **Documentação completa:** Ver `documentacao/anotacoes_bean_validation.md`
 
 ---
 
@@ -1174,6 +1419,82 @@ DELETE http://localhost:8080/products/999
 }
 ```
 
+---
+
+**4. Validação de Dados (POST/PUT):**
+
+**Request (dados inválidos):**
+```http
+POST http://localhost:8080/products
+Content-Type: application/json
+
+{
+  "name": "",
+  "description": "Curta",
+  "price": -10.0,
+  "imgUrl": "http://img.jpg"
+}
+```
+
+**Response:** `422 Unprocessable Entity`
+```json
+{
+  "timestamp": "2025-12-30T15:33:00.123Z",
+  "status": 422,
+  "error": "Dados inválidos",
+  "path": "/products",
+  "errors": [
+    {
+      "fieldName": "name",
+      "message": "Nome não pode estar em branco"
+    },
+    {
+      "fieldName": "description",
+      "message": "Descrição precisa ter no mínimo 10 caracteres"
+    },
+    {
+      "fieldName": "price",
+      "message": "O preço deve ser um valor positivo"
+    }
+  ]
+}
+```
+
+**Handler de Validação:**
+```java
+@ExceptionHandler(MethodArgumentNotValidException.class)
+public ResponseEntity<CustomError> methodArgumentNotValidation(
+        MethodArgumentNotValidException e, 
+        HttpServletRequest request) {
+    
+    HttpStatus status = HttpStatus.UNPROCESSABLE_ENTITY;
+    ValidationError err = new ValidationError(
+        Instant.now(), 
+        status.value(), 
+        "Dados inválidos", 
+        request.getRequestURI()
+    );
+    
+    for (FieldError f : e.getBindingResult().getFieldErrors()) {
+        err.addError(f.getField(), f.getDefaultMessage());
+    }
+    
+    return ResponseEntity.status(status).body(err);
+}
+```
+
+---
+
+### Tipos de Exceções Tratadas
+
+| Exceção | Status HTTP | Cenário | Mensagem |
+|---------|-------------|---------|----------|
+| `ResourceNotFoundException` | 404 Not Found | Recurso não existe | "Recurso não encontrado" |
+| `MethodArgumentNotValidException` | 422 Unprocessable Entity | Validação de dados falhou | "Dados inválidos" + lista de erros |
+| `DataIntegrityViolationException` | 400 Bad Request | Violação de integridade referencial | "Falha de integridade referencial" |
+
+---
+
 ### Vantagens do Tratamento Centralizado
 
 | Vantagem | Descrição |
@@ -1181,9 +1502,10 @@ DELETE http://localhost:8080/products/999
 | ✅ **Consistência** | Todas as respostas de erro seguem o mesmo padrão |
 | ✅ **Manutenibilidade** | Tratamento centralizado em um único lugar |
 | ✅ **Informativo** | Detalhes completos: timestamp, status, mensagem e path |
-| ✅ **Status HTTP corretos** | 404 ao invés de 500 para recursos não encontrados |
+| ✅ **Status HTTP corretos** | 404 para não encontrado, 422 para validação |
 | ✅ **Melhor DX** | Desenvolvedores que consomem a API têm respostas claras |
 | ✅ **Rastreabilidade** | Timestamp facilita correlação com logs |
+| ✅ **Validação detalhada** | Lista todos os campos com erro de validação |
 
 ---
 
@@ -1321,9 +1643,24 @@ spring.jpa.hibernate.ddl-auto=validate
 
 ## 📚 Referências
 
+### Documentação do Projeto
+
+📖 **Guias de Consulta Rápida:**
+- [`documentacao/jpa.md`](documentacao/jpa.md) - Guia completo sobre JPA, modelagem e relacionamentos
+- [`documentacao/anotacoes_bean_validation.md`](documentacao/anotacoes_bean_validation.md) - Bean Validation com mensagens amigáveis
+- [`documentacao/excecoes.md`](documentacao/excecoes.md) - Tratamento de exceções padronizado
+
+### Documentação Oficial
+
 - [Spring Boot Documentation](https://docs.spring.io/spring-boot/docs/current/reference/htmlsingle/)
 - [Spring Data JPA Documentation](https://docs.spring.io/spring-data/jpa/docs/current/reference/html/)
+- [Bean Validation Specification](https://beanvalidation.org/2.0/)
+- [Hibernate Validator](https://hibernate.org/validator/)
 - [REST API Best Practices](https://restfulapi.net/)
+- [HTTP Status Codes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status)
+
+### Cursos e Materiais
+
 - [DevSuperior - Curso Java Spring](https://devsuperior.com.br/)
 
 ---
