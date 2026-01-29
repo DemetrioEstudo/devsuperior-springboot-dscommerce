@@ -989,7 +989,7 @@ public ResponseEntity<ProductDTO> insert(@Valid @RequestBody ProductDTO dto) {
     return ResponseEntity.created(uri).body(dto);
 }
 
-@PutMapping("/{id}")
+@PutMapping(value = "/{id}")
 public ResponseEntity<ProductDTO> update(
         @PathVariable Long id,
         @Valid @RequestBody ProductDTO dto) {
@@ -1333,6 +1333,7 @@ public class ControllerExceptionHandler {
     }
 }
 ```
+
 
 ### ResourceNotFoundException
 
