@@ -64,3 +64,8 @@
 | 1 tem vários | **1:N + N:1** |
 | Ambos têm vários, sem atributos extras | **N:N simples** (`@ManyToMany`) |
 | Ambos têm vários, com atributos extras | **Classe de associação** (N:N real) |
+
+---
+
+**Desenvolvido para fins de consulta - Flávio Antonio Demétrio**
+
