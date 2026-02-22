@@ -6,14 +6,27 @@ API REST de e-commerce desenvolvida com Java e Spring Boot.
 
 ## 📌 Sobre o Projeto
 
-Sistema backend para gerenciamento de produtos, categorias, usuários, pedidos e pagamentos. O projeto implementa uma arquitetura em camadas seguindo as melhores práticas do Spring Boot, incluindo CRUD completo de produtos com tratamento de exceções personalizado.
+Sistema backend para gerenciamento de produtos, categorias, usuários, pedidos e pagamentos. O projeto implementa uma arquitetura em camadas seguindo as melhores práticas do Spring Boot, incluindo **autenticação OAuth2 com JWT**, **autorização baseada em roles**, CRUD completo de produtos com tratamento de exceções personalizado.
 
 **Funcionalidades Implementadas:**
+
+**🔐 Autenticação e Autorização:**
+- ✅ OAuth2 Authorization Server
+- ✅ Autenticação com username/password (Custom Grant Type)
+- ✅ Tokens JWT assinados com RSA 2048 bits
+- ✅ Autorização baseada em roles (`ROLE_ADMIN`, `ROLE_OPERATOR`)
+- ✅ Proteção de endpoints com `@PreAuthorize`
+- ✅ CORS configurável para frontend
+- ✅ Criptografia de senhas com BCrypt
+- ✅ UserDetailsService customizado
+
+**📦 Gestão de Produtos:**
 - ✅ Buscar produto por ID
 - ✅ Listar produtos (paginado)
-- ✅ Inserir novo produto
-- ✅ Atualizar produto existente
-- ✅ Deletar produto
+- ✅ Inserir novo produto (requer `ROLE_ADMIN`)
+- ✅ Atualizar produto existente (requer `ROLE_ADMIN` ou `ROLE_OPERATOR`)
+- ✅ Deletar produto (requer `ROLE_ADMIN`)
+- ✅ Validação de dados com Bean Validation
 - ✅ Tratamento de exceções personalizado com `@ControllerAdvice`
 - ✅ Validação de integridade referencial
 
@@ -25,6 +38,15 @@ dscommerce/
 ├── src/main/java/br/com/klsys/dscommerce/
 │   ├── DscommerceApplication.java
 │   │
+│   ├── config/                         # Configurações de Segurança
+│   │   ├── AuthorizationServerConfig.java     # OAuth2 Authorization Server
+│   │   ├── ResourceServerConfig.java          # Resource Server (validação JWT)
+│   │   └── customgrant/                       # Custom Grant Type (Password)
+│   │       ├── CustomPasswordAuthenticationConverter.java
+│   │       ├── CustomPasswordAuthenticationProvider.java
+│   │       ├── CustomPasswordAuthenticationToken.java
+│   │       └── CustomUserAuthorities.java
+│   │
 │   ├── controllers/                    # Camada de Apresentação (REST API)
 │   │   ├── ProductController.java
 │   │   └── handlers/
@@ -32,30 +54,47 @@ dscommerce/
 │   │
 │   ├── services/                       # Camada de Lógica de Negócio
 │   │   ├── ProductService.java
+│   │   ├── UserService.java                   # UserDetailsService (autenticação)
 │   │   └── exceptions/
 │   │       └── ResourceNotFoundException.java
 │   │
 │   ├── repositories/                   # Camada de Acesso a Dados
-│   │   └── ProductRepository.java
+│   │   ├── ProductRepository.java
+│   │   └── UserRepository.java
 │   │
 │   ├── entities/                       # Entidades JPA (Modelo de Domínio)
 │   │   ├── Product.java
 │   │   ├── Category.java
-│   │   ├── User.java
+│   │   ├── User.java                          # Implementa UserDetails
+│   │   ├── Role.java                          # Implementa GrantedAuthority
 │   │   ├── Order.java
 │   │   ├── OrderItem.java
 │   │   ├── OrderItemPk.java
 │   │   ├── Payment.java
 │   │   └── OrderStatus.java
 │   │
+│   ├── projections/                    # Projeções JPA
+│   │   └── UserDetailsProjection.java
+│   │
 │   └── dto/                            # Data Transfer Objects
 │       ├── ProductDTO.java
-│       └── CustomError.java
+│       ├── CustomError.java
+│       ├── FieldMessage.java
+│       └── ValidationError.java
 │
 ├── src/main/resources/
 │   ├── application.properties          # Configurações principais
 │   ├── application-test.properties     # Configurações de teste
-│   └── import.sql                      # Dados iniciais (seed)
+│   ├── import.sql                      # Dados iniciais (seed)
+│   └── META-INF/
+│       └── additional-spring-configuration-metadata.json
+│
+├── documentacao/                       # Documentação técnica
+│   ├── autenticacao_autorizacao.md     # Guia completo OAuth2 + JWT
+│   ├── excecoes.md                     # Tratamento de exceções
+│   ├── jpa.md                          # Guia JPA
+│   ├── GuiaRelacionamentoJPA.md        # Relacionamentos JPA
+│   └── anotacoes_bean_validation.md    # Bean Validation
 │
 └── pom.xml                             # Dependências Maven
 ```
@@ -70,8 +109,12 @@ dscommerce/
 | Spring Boot | 3.4.1 | Framework para aplicações Java |
 | Spring Data JPA | 3.4.1 | Abstração de persistência de dados com Hibernate |
 | Spring Web | 3.4.1 | Desenvolvimento de APIs REST |
+| Spring Security | 6.4.2 | Framework de segurança e autenticação |
+| Spring OAuth2 Authorization Server | 1.4.1 | Servidor de autorização OAuth2 |
 | Spring Validation | 3.4.1 | Validação de dados com Bean Validation |
-| H2 Database | runtime | Banco de dados em memória (desenvolvimento) |
+| JWT (JSON Web Token) | - | Tokens de autenticação stateless |
+| BCrypt | - | Algoritmo de criptografia de senhas |
+| H2 Database | 2.3.232 | Banco de dados em memória (desenvolvimento) |
 | Maven | 4.0.0 | Gerenciador de dependências e build |
 
 **Dependências principais:**
@@ -93,6 +136,18 @@ dscommerce/
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    
+    <!-- Spring Security -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    
+    <!-- OAuth2 Authorization Server -->
+    <dependency>
+        <groupId>org.springframework.security</groupId>
+        <artifactId>spring-security-oauth2-authorization-server</artifactId>
     </dependency>
     
     <!-- H2 Database -->
@@ -152,14 +207,28 @@ mvnw.cmd spring-boot:run
 - Execute a classe `DscommerceApplication.java`
 
 **4. Acessar a aplicação:**
-- API: http://localhost:8080
-- Console H2: http://localhost:8080/h2-console
+- **API REST:** http://localhost:8080
+- **Console H2:** http://localhost:8080/h2-console
+  - JDBC URL: `jdbc:h2:mem:testdb`
+  - Username: `sa`
+  - Password: (deixe em branco)
 
 ### Configuração
 
 **application.properties:**
 ```properties
-spring.profiles.active=test
+spring.profiles.active=${APP_PROFILE:test}
+spring.jpa.open-in-view=false
+
+# OAuth2 - Client Credentials
+security.client-id=${CLIENT_ID:myclientid}
+security.client-secret=${CLIENT_SECRET:myclientsecret}
+
+# JWT - Duração em segundos (86400 = 24 horas)
+security.jwt.duration=${JWT_DURATION:86400}
+
+# CORS - Origens permitidas
+cors.origins=${CORS_ORIGINS:http://localhost:3000,http://localhost:5173}
 ```
 
 **application-test.properties:**
@@ -180,6 +249,52 @@ spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.format_sql=true
 ```
 
+### Variáveis de Ambiente (Opcional)
+
+Para customizar as configurações, defina variáveis de ambiente:
+
+**Linux/Mac:**
+```bash
+export APP_PROFILE=test
+export CLIENT_ID=myclientid
+export CLIENT_SECRET=myclientsecret
+export JWT_DURATION=86400
+export CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:APP_PROFILE="test"
+$env:CLIENT_ID="myclientid"
+$env:CLIENT_SECRET="myclientsecret"
+$env:JWT_DURATION="86400"
+$env:CORS_ORIGINS="http://localhost:3000,http://localhost:5173"
+```
+
+### Testar Autenticação
+
+**1. Obter Token JWT:**
+```bash
+curl -X POST http://localhost:8080/oauth2/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "Authorization: Basic bXljbGllbnRpZDpteWNsaWVudHNlY3JldA==" \
+  -d "grant_type=password" \
+  -d "username=maria@gmail.com" \
+  -d "password=123456"
+```
+
+**2. Usar Token na API:**
+```bash
+curl -X GET http://localhost:8080/products \
+  -H "Authorization: Bearer <seu-token-jwt>"
+```
+
+**Usuários de teste:**
+| Email | Senha | Roles |
+|-------|-------|-------|
+| alex@gmail.com | 123456 | ROLE_OPERATOR |
+| maria@gmail.com | 123456 | ROLE_OPERATOR, ROLE_ADMIN |
+
 
 ---
 
@@ -187,60 +302,158 @@ spring.jpa.properties.hibernate.format_sql=true
 
 ### Visão Geral
 
-O projeto segue uma **arquitetura em camadas (Layered Architecture)** com separação clara de responsabilidades:
+O projeto segue uma **arquitetura em camadas (Layered Architecture)** com separação clara de responsabilidades, incluindo **camada de segurança OAuth2 + JWT**:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     CLIENTE HTTP                             │
-│              (Postman, Browser, Apps)                        │
+│                     CLIENTE HTTP                            │
+│              (Postman, Browser, Apps)                       │
 └────────────────────────┬────────────────────────────────────┘
-                         │ HTTP Request (JSON)
+                         │ HTTP Request (JSON + JWT Token)
                          ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                  PRESENTATION LAYER                          │
-│                     (@RestController)                        │
+│                   SECURITY LAYER                            │
+│          (@Configuration + SecurityFilterChain)             │
 ├─────────────────────────────────────────────────────────────┤
-│  • ProductController                                         │
-│  • Recebe requisições HTTP                                   │
-│  • Valida parâmetros de entrada                             │
-│  • Retorna ResponseEntity<DTO>                              │
-│  • Define rotas e métodos HTTP                              │
+│  • AuthorizationServerConfig (OAuth2)                       │
+│    - Emite tokens JWT                                       │
+│    - Valida credenciais (username/password)                 │
+│    - Customiza claims do token                              │
+│                                                             │
+│  • ResourceServerConfig                                     │
+│    - Valida JWT em todas as requisições                     │
+│    - Extrai authorities (roles) do token                    │
+│    - Aplica regras de autorização                           │
+│                                                             │
+│  • CorsConfig                                               │
+│    - Permite requisições de origens diferentes              │
+│                                                             │
+│  • Custom Grant Type (Password)                             │
+│    - CustomPasswordAuthenticationConverter                  │
+│    - CustomPasswordAuthenticationProvider                   │
+│    - CustomPasswordAuthenticationToken                      │
+└────────────────────────┬────────────────────────────────────┘
+                         │ JWT validado + authorities extraídas
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│                  PRESENTATION LAYER                         │
+│                     (@RestController)                       │
+├─────────────────────────────────────────────────────────────┤
+│  • ProductController                                        │
+│    - @PreAuthorize("hasRole('ROLE_ADMIN')")                 │
+│    - Recebe requisições HTTP                                │
+│    - Valida parâmetros de entrada (@Valid)                  │
+│    - Retorna ResponseEntity<DTO>                            │
+│    - Define rotas e métodos HTTP                            │
+│                                                             │
+│  • ControllerExceptionHandler (@ControllerAdvice)           │
+│    - Trata exceções globalmente                             │
+│    - Retorna respostas padronizadas de erro                 │
 └────────────────────────┬────────────────────────────────────┘
                          │ ProductDTO
                          ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                   BUSINESS LAYER                             │
-│                      (@Service)                              │
+│                   BUSINESS LAYER                            │
+│                      (@Service)                             │
 ├─────────────────────────────────────────────────────────────┤
-│  • ProductService                                            │
-│  • Implementa regras de negócio                             │
-│  • Gerencia transações (@Transactional)                     │
-│  • Converte Entity ↔ DTO                                    │
-│  • Lança exceções de negócio                                │
+│  • ProductService                                           │
+│    - Implementa regras de negócio                           │
+│    - Gerencia transações (@Transactional)                   │
+│    - Converte Entity ↔ DTO                                  │
+│    - Lança exceções de negócio                              │
+│                                                             │
+│  • UserService (implements UserDetailsService)              │
+│    - Carrega dados do usuário para autenticação             │
+│    - Busca usuário + roles do banco                         │
 └────────────────────────┬────────────────────────────────────┘
-                         │ Entity (Product)
+                         │ Entity (Product, User)
                          ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                 PERSISTENCE LAYER                            │
-│                    (@Repository)                             │
+│                 PERSISTENCE LAYER                           │
+│                    (@Repository)                            │
 ├─────────────────────────────────────────────────────────────┤
-│  • ProductRepository (JpaRepository)                         │
-│  • Abstração de acesso a dados                              │
-│  • Operações CRUD automáticas                               │
-│  • Queries derivadas de métodos                             │
+│  • ProductRepository (JpaRepository)                        │
+│    - Abstração de acesso a dados                            │
+│    - Operações CRUD automáticas                             │
+│    - Queries derivadas de métodos                           │
+│                                                             │
+│  • UserRepository                                           │
+│    - Query customizada para buscar User + Roles             │
+│    - Projection para UserDetailsProjection                  │
 └────────────────────────┬────────────────────────────────────┘
                          │ SQL/JDBC
                          ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                    DATABASE LAYER                            │
-│                  (H2 / PostgreSQL)                           │
+│                    DATABASE LAYER                           │
+│                  (H2 / PostgreSQL)                          │
 ├─────────────────────────────────────────────────────────────┤
-│  • tb_product, tb_category, tb_user                         │
+│  • tb_product, tb_category                                  │
+│  • tb_user, tb_role, tb_user_role                           │
 │  • tb_order, tb_order_item, tb_payment                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Fluxo de Dados
+### Fluxo de Autenticação e Autorização
+
+**1. Login (Obter Token JWT):**
+```
+Cliente envia: POST /oauth2/token
+  - grant_type=password
+  - username=maria@gmail.com
+  - password=123456
+  - Authorization: Basic base64(clientId:clientSecret)
+    ↓
+AuthorizationServerConfig
+  ↓
+CustomPasswordAuthenticationConverter
+  - Extrai username e password da requisição
+    ↓
+CustomPasswordAuthenticationProvider
+  - UserService.loadUserByUsername(username)
+  - PasswordEncoder.matches(password, user.password)
+  - Extrai roles do usuário
+  - Gera JWT com claims customizadas
+    ↓
+Retorna: 
+{
+  "access_token": "eyJhbGc...",
+  "token_type": "Bearer",
+  "expires_in": 86400,
+  "scope": "read write"
+}
+```
+
+**2. Acessar API Protegida:**
+```
+Cliente envia: GET /products/1
+  - Authorization: Bearer eyJhbGc...
+    ↓
+ResourceServerConfig
+  ↓
+OAuth2ResourceServerFilter
+  - Valida assinatura do JWT (RSA)
+  - Verifica expiração
+  - Extrai authorities do token
+    ↓
+JwtAuthenticationConverter
+  - Converte claims "authorities" em GrantedAuthority
+  - Cria Authentication com roles
+    ↓
+@PreAuthorize("hasRole('ROLE_ADMIN')")
+  - Verifica se usuário tem a role necessária
+  - ✅ Autorizado → executa método
+  - ❌ Negado → 403 Forbidden
+    ↓
+ProductController.findById(1)
+  ↓
+ProductService.findById(1)
+  ↓
+ProductRepository.findById(1)
+  ↓
+Retorna ProductDTO
+```
+
+### Fluxo de Dados (CRUD)
 
 **Requisição (Cliente → Servidor):**
 ```
@@ -289,32 +502,32 @@ O projeto segue uma **arquitetura em camadas (Layered Architecture)** com separa
 ### Componentes Transversais
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                CROSS-CUTTING CONCERNS                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
+┌────────────────────────────────────────────────────────────┐
+│                CROSS-CUTTING CONCERNS                      │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │          @ControllerAdvice                           │  │
 │  │   • Tratamento global de exceções                    │  │
 │  │   • Intercepta erros de todas as camadas             │  │
 │  │   • Retorna respostas padronizadas                   │  │
 │  └──────────────────────────────────────────────────────┘  │
-│                                                              │
+│                                                            │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │          @Transactional                              │  │
 │  │   • Gerenciamento de transações                      │  │
 │  │   • Controle de commit/rollback                      │  │
 │  │   • Isolamento e propagação                          │  │
 │  └──────────────────────────────────────────────────────┘  │
-│                                                              │
+│                                                            │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │          Spring Data JPA                             │  │
 │  │   • Abstração de persistência                        │  │
 │  │   • Geração automática de queries                    │  │
 │  │   • Gerenciamento de EntityManager                   │  │
 │  └──────────────────────────────────────────────────────┘  │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+│                                                            │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ### Princípios Aplicados
@@ -418,6 +631,238 @@ public class ProductDTO {
 
 
 
+
+---
+
+## 🔐 Autenticação e Autorização
+
+### Visão Geral
+
+O projeto implementa um sistema robusto de autenticação e autorização utilizando:
+
+- **OAuth 2.0** - Protocolo de autorização
+- **JWT (JSON Web Tokens)** - Tokens stateless assinados com RSA
+- **Spring Security** - Framework de segurança
+- **BCrypt** - Criptografia de senhas
+- **Custom Grant Type (Password)** - Fluxo de autenticação com username/password
+
+### Arquitetura de Segurança
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                  AUTHORIZATION SERVER                      │
+│              (Emite e valida tokens JWT)                   │
+├────────────────────────────────────────────────────────────┤
+│  • AuthorizationServerConfig (@Order(2))                   │
+│    - Registra clientes OAuth2                              │
+│    - Configura duração dos tokens                          │
+│    - Gera chaves RSA para assinatura                       │
+│    - Customiza claims do JWT                               │
+│                                                            │
+│  • Custom Grant Type (Password)                            │
+│    - CustomPasswordAuthenticationConverter                 │
+│    - CustomPasswordAuthenticationProvider                  │
+│    - CustomPasswordAuthenticationToken                     │
+│    - CustomUserAuthorities                                 │
+└────────────────────────────────────────────────────────────┘
+                              ↓
+┌────────────────────────────────────────────────────────────┐
+│                    RESOURCE SERVER                         │
+│           (Protege APIs e valida tokens)                   │
+├────────────────────────────────────────────────────────────┤
+│  • ResourceServerConfig (@Order(3))                        │
+│    - Valida assinatura JWT (RSA)                           │
+│    - Extrai authorities do token                           │
+│    - Configura CORS                                        │
+│    - Aplica regras de autorização                          │
+│                                                            │
+│  • Security Filter Chains:                                 │
+│    1. H2 Console (profile test)                            │
+│    2. Authorization Server endpoints                       │
+│    3. Resource Server (APIs REST)                          │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Como Funciona
+
+#### 1️⃣ **Login - Obter Token JWT**
+
+**Requisição:**
+```http
+POST http://localhost:8080/oauth2/token
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic bXljbGllbnRpZDpteWNsaWVudHNlY3JldA==
+
+grant_type=password
+&username=maria@gmail.com
+&password=123456
+```
+
+**Authorization Header:**
+```bash
+# Formato: Basic base64(clientId:clientSecret)
+echo -n "myclientid:myclientsecret" | base64
+# Resultado: bXljbGllbnRpZDpteWNsaWVudHNlY3JldA==
+```
+
+**Resposta (200 OK):**
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJteWNsaWVudGlkIiwiYXVkIjpbIm15Y2xpZW50aWQiXSwibmJmIjoxNzA4NjIzODQ3LCJzY29wZSI6WyJyZWFkIiwid3JpdGUiXSwiYXV0aG9yaXRpZXMiOlsiUk9MRV9BRE1JTiIsIlJPTEVfT1BFUkFUT1IiXSwidXNlcm5hbWUiOiJtYXJpYUBnbWFpbC5jb20iLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwODAiLCJleHAiOjE3MDg3MTAyNDcsImlhdCI6MTcwODYyMzg0N30...",
+  "token_type": "Bearer",
+  "expires_in": 86400,
+  "scope": "read write"
+}
+```
+
+**Estrutura do JWT:**
+```json
+{
+  "sub": "myclientid",
+  "aud": ["myclientid"],
+  "nbf": 1708623847,
+  "scope": ["read", "write"],
+  "authorities": ["ROLE_ADMIN", "ROLE_OPERATOR"],
+  "username": "maria@gmail.com",
+  "iss": "http://localhost:8080",
+  "exp": 1708710247,
+  "iat": 1708623847
+}
+```
+
+#### 2️⃣ **Acessar API Protegida**
+
+**Requisição:**
+```http
+GET http://localhost:8080/products/1
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Fluxo de Validação:**
+```
+1. OAuth2ResourceServerFilter intercepta requisição
+   ↓
+2. Valida assinatura JWT com chave pública RSA
+   ↓
+3. Verifica expiração do token
+   ↓
+4. JwtAuthenticationConverter extrai "authorities"
+   ↓
+5. @PreAuthorize verifica se usuário tem role necessária
+   ↓
+6. ✅ Autorizado → executa método
+   ❌ Negado → 403 Forbidden
+```
+
+### Configurações
+
+**application.properties:**
+```properties
+# OAuth2 Client Credentials
+security.client-id=${CLIENT_ID:myclientid}
+security.client-secret=${CLIENT_SECRET:myclientsecret}
+
+# JWT - Duração em segundos (86400 = 24 horas)
+security.jwt.duration=${JWT_DURATION:86400}
+
+# CORS - Origens permitidas
+cors.origins=${CORS_ORIGINS:http://localhost:3000,http://localhost:5173}
+```
+
+### Roles e Permissões
+
+**Roles disponíveis:**
+- `ROLE_OPERATOR` - Operador (leitura e escrita básica)
+- `ROLE_ADMIN` - Administrador (todas as permissões)
+
+**Usuários de teste (import.sql):**
+```sql
+-- Alex: ROLE_OPERATOR
+INSERT INTO tb_user (name, email, password, phone, birth_date) 
+VALUES ('Alex', 'alex@gmail.com', '$2y$10$EL1Oja...', '99999999', '1990-07-25');
+
+-- Maria: ROLE_OPERATOR + ROLE_ADMIN
+INSERT INTO tb_user (name, email, password, phone, birth_date) 
+VALUES ('Maria', 'maria@gmail.com', '$2y$10$EL1Oja...', '88888888', '1992-05-15');
+```
+
+**Senha padrão (BCrypt):** `123456`
+
+### Controle de Acesso nos Endpoints
+
+```java
+// Permitir acesso público
+@GetMapping("/{id}")
+public ResponseEntity<ProductDTO> findById(@PathVariable Long id) {
+    ProductDTO dto = service.findById(id);
+    return ResponseEntity.ok(dto);
+}
+
+// Apenas usuários autenticados
+@PreAuthorize("isAuthenticated()")
+@GetMapping
+public ResponseEntity<Page<ProductDTO>> findAll(Pageable pageable) {
+    Page<ProductDTO> dto = service.findAll(pageable);
+    return ResponseEntity.ok().body(dto);
+}
+
+// Apenas ADMIN
+@PreAuthorize("hasRole('ROLE_ADMIN')")
+@PostMapping
+public ResponseEntity<ProductDTO> insert(@Valid @RequestBody ProductDTO dto) {
+    dto = service.insert(dto);
+    URI uri = ServletUriComponentsBuilder.fromCurrentRequest()
+        .path("/{id}")
+        .buildAndExpand(dto.getId())
+        .toUri();
+    return ResponseEntity.created(uri).body(dto);
+}
+
+// ADMIN ou OPERATOR
+@PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_OPERATOR')")
+@PutMapping("/{id}")
+public ResponseEntity<ProductDTO> update(
+    @PathVariable Long id, 
+    @Valid @RequestBody ProductDTO dto
+) {
+    dto = service.update(id, dto);
+    return ResponseEntity.ok().body(dto);
+}
+```
+
+### CORS (Cross-Origin Resource Sharing)
+
+Configurado para permitir requisições de aplicações frontend:
+
+```java
+@Bean
+CorsConfigurationSource corsConfigurationSource() {
+    String[] origins = corsOrigins.split(",");
+    
+    CorsConfiguration corsConfig = new CorsConfiguration();
+    corsConfig.setAllowedOriginPatterns(Arrays.asList(origins));
+    corsConfig.setAllowedMethods(Arrays.asList("POST", "GET", "PUT", "DELETE", "PATCH"));
+    corsConfig.setAllowCredentials(true);
+    corsConfig.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
+    
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", corsConfig);
+    return source;
+}
+```
+
+### Documentação Completa
+
+Para detalhes completos sobre a implementação de autenticação e autorização, consulte:
+
+📄 **[documentacao/autenticacao_autorizacao.md](documentacao/autenticacao_autorizacao.md)**
+
+Este documento contém:
+- Explicação detalhada de todos os componentes
+- Diagramas de fluxo
+- Estrutura do JWT
+- Exemplos de uso com cURL, JavaScript e Axios
+- Troubleshooting de erros comuns
 
 ---
 
@@ -1119,12 +1564,57 @@ Todas as mensagens são **amigáveis** e **descritivas**:
 
 ## 🧪 Testando a API
 
+### 0. Autenticação - Obter Token JWT
+
+Antes de testar endpoints protegidos, você precisa obter um token JWT:
+
+**Request:**
+```http
+POST http://localhost:8080/oauth2/token
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic bXljbGllbnRpZDpteWNsaWVudHNlY3JldA==
+
+grant_type=password&username=maria@gmail.com&password=123456
+```
+
+**Como gerar o Authorization Header:**
+```bash
+# Formato: Basic base64(clientId:clientSecret)
+echo -n "myclientid:myclientsecret" | base64
+# Resultado: bXljbGllbnRpZDpteWNsaWVudHNlY3JldA==
+```
+
+**Response:** `200 OK`
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJteWNsaWVudGlkIiwiYXVkIjpbIm15Y2xpZW50aWQiXSwibmJmIjoxNzA4NjIzODQ3LCJzY29wZSI6WyJyZWFkIiwid3JpdGUiXSwiYXV0aG9yaXRpZXMiOlsiUk9MRV9BRE1JTiIsIlJPTEVfT1BFUkFUT1IiXSwidXNlcm5hbWUiOiJtYXJpYUBnbWFpbC5jb20iLCJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwODAiLCJleHAiOjE3MDg3MTAyNDcsImlhdCI6MTcwODYyMzg0N30.signature...",
+  "token_type": "Bearer",
+  "expires_in": 86400,
+  "scope": "read write"
+}
+```
+
+**Usuários disponíveis:**
+| Email | Senha | Roles |
+|-------|-------|-------|
+| alex@gmail.com | 123456 | ROLE_OPERATOR |
+| maria@gmail.com | 123456 | ROLE_OPERATOR, ROLE_ADMIN |
+
+**💡 Use o `access_token` recebido nos próximos requests:**
+```http
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+---
+
 ### 1. Buscar Produto por ID
 
 **Request:**
 ```http
 GET http://localhost:8080/products/1
 ```
+
+**🔓 Endpoint público** - Não requer autenticação
 
 **Response:** `200 OK`
 ```json
@@ -1148,6 +1638,8 @@ GET http://localhost:8080/products?page=0&size=5
 GET http://localhost:8080/products?page=0&size=10&sort=name,asc
 GET http://localhost:8080/products?page=1&size=10&sort=price,desc
 ```
+
+**🔓 Endpoint público** - Não requer autenticação
 
 **Parâmetros de Paginação:**
 
@@ -1203,10 +1695,13 @@ GET http://localhost:8080/products?page=1&size=10&sort=price,desc
 
 ### 3. Inserir Novo Produto
 
+**🔐 Requer:** `ROLE_ADMIN`
+
 **Request:**
 ```http
 POST http://localhost:8080/products
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 
 {
   "name": "Smart TV 50 polegadas",
@@ -1232,14 +1727,21 @@ Content-Type: application/json
 Location: http://localhost:8080/products/26
 ```
 
+**⚠️ Erros possíveis:**
+- `401 Unauthorized` - Token inválido ou expirado
+- `403 Forbidden` - Usuário não tem `ROLE_ADMIN`
+
 ---
 
 ### 4. Atualizar Produto Existente
+
+**🔐 Requer:** `ROLE_ADMIN` ou `ROLE_OPERATOR`
 
 **Request:**
 ```http
 PUT http://localhost:8080/products/1
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 
 {
   "name": "The Lord of the Rings - Edição Especial",
@@ -1264,9 +1766,14 @@ Content-Type: application/json
 
 ### 5. Deletar Produto
 
+### 5. Deletar Produto
+
+**🔐 Requer:** `ROLE_ADMIN`
+
 **Request:**
 ```http
 DELETE http://localhost:8080/products/1
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response:** `204 No Content`
@@ -1279,22 +1786,45 @@ DELETE http://localhost:8080/products/1
 - ✅ Não há corpo na resposta
 - ⚠️ Se o ID não existir, retorna `404 Not Found`
 - ⚠️ Se houver integridade referencial, retorna erro tratado
+- ⚠️ `401 Unauthorized` - Token inválido ou expirado
+- ⚠️ `403 Forbidden` - Usuário não tem `ROLE_ADMIN`
 
 ---
 
 ### Testando com cURL
 
 ```bash
-# GET - Buscar por ID
+# 0. LOGIN - Obter Token JWT
+curl -X POST http://localhost:8080/oauth2/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "Authorization: Basic bXljbGllbnRpZDpteWNsaWVudHNlY3JldA==" \
+  -d "grant_type=password&username=maria@gmail.com&password=123456"
+
+# Salvar o token em uma variável
+TOKEN="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# GET - Buscar por ID (público)
 curl -X GET http://localhost:8080/products/1
 
-# GET - Listar todos (paginado)
+# GET - Listar todos paginado (público)
 curl -X GET "http://localhost:8080/products?page=0&size=5"
 
-# POST - Inserir
+# POST - Inserir (requer ROLE_ADMIN)
 curl -X POST http://localhost:8080/products \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"name":"Notebook","description":"Notebook Dell","price":3500.00,"imgUrl":"http://example.com/notebook.jpg"}'
+
+# PUT - Atualizar (requer ROLE_ADMIN ou ROLE_OPERATOR)
+curl -X PUT http://localhost:8080/products/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"Notebook Updated","description":"Updated","price":3200.00,"imgUrl":"http://example.com/notebook.jpg"}'
+
+# DELETE - Deletar (requer ROLE_ADMIN)
+curl -X DELETE http://localhost:8080/products/1 \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 # PUT - Atualizar
 curl -X PUT http://localhost:8080/products/1 \
@@ -1573,13 +2103,40 @@ public ResponseEntity<CustomError> methodArgumentNotValidation(
 
 ### Dados de Teste (import.sql)
 
-O arquivo `import.sql` popula o banco com 25 produtos para testes:
+O arquivo `import.sql` popula o banco com dados iniciais para testes:
 
+**Usuários e Permissões:**
+```sql
+-- Usuários (senha: 123456 criptografada com BCrypt)
+INSERT INTO tb_user (name, email, password, phone, birth_date) 
+VALUES ('Alex', 'alex@gmail.com', '$2y$10$EL1OjaRlHrsTg0C5VpO9Levfu6cc6vQewysJsz9txC7Mn1SXDHdCW', '99999999', '1990-07-25');
+
+INSERT INTO tb_user (name, email, password, phone, birth_date) 
+VALUES ('Maria', 'maria@gmail.com', '$2y$10$EL1OjaRlHrsTg0C5VpO9Levfu6cc6vQewysJsz9txC7Mn1SXDHdCW', '88888888', '1992-05-15');
+
+-- Roles
+INSERT INTO tb_role (authority) VALUES ('ROLE_OPERATOR');
+INSERT INTO tb_role (authority) VALUES ('ROLE_ADMIN');
+
+-- Associação User-Role
+INSERT INTO tb_user_role (user_id, role_id) VALUES (1, 1); -- Alex: OPERATOR
+INSERT INTO tb_user_role (user_id, role_id) VALUES (2, 1); -- Maria: OPERATOR
+INSERT INTO tb_user_role (user_id, role_id) VALUES (2, 2); -- Maria: ADMIN
+```
+
+**Produtos (25 itens):**
 ```sql
 INSERT INTO tb_product (name, price, description, img_Url) VALUES 
 ('The Lord of the Rings', 90.5, 'Lorem ipsum dolor sit amet...', 'https://raw.githubusercontent.com/devsuperior/dscatalog-resources/master/backend/img/1-big.jpg'),
 ('Smart TV', 2190.0, 'Lorem ipsum dolor sit amet...', 'https://raw.githubusercontent.com/devsuperior/dscatalog-resources/master/backend/img/2-big.jpg'),
 -- ... mais 23 produtos
+```
+
+**Categorias, Pedidos e Pagamentos:**
+```sql
+INSERT INTO tb_category(name) VALUES ('Livros'), ('Eletrônicos'), ('Computadores');
+INSERT INTO tb_order (moment, status, client_id) VALUES (TIMESTAMP WITH TIME ZONE '2022-07-25T13:00:00Z', 1, 1);
+INSERT INTO tb_payment (order_id, moment) VALUES (1, TIMESTAMP WITH TIME ZONE '2022-07-25T15:00:00Z');
 ```
 
 ### Console H2
@@ -1616,8 +2173,29 @@ SELECT * FROM TB_CATEGORY;
 -- Listar usuários
 SELECT * FROM TB_USER;
 
+-- Listar roles
+SELECT * FROM TB_ROLE;
+
+-- Usuários com suas roles
+SELECT u.name, u.email, r.authority 
+FROM TB_USER u
+INNER JOIN TB_USER_ROLE ur ON u.id = ur.user_id
+INNER JOIN TB_ROLE r ON ur.role_id = r.id
+ORDER BY u.name;
+
 -- Ver estrutura da tabela
 SHOW COLUMNS FROM TB_PRODUCT;
+
+-- Listar todos os pedidos
+SELECT o.id, o.moment, o.status, u.name as client_name
+FROM TB_ORDER o
+INNER JOIN TB_USER u ON o.client_id = u.id;
+
+-- Produtos de um pedido
+SELECT p.name, oi.quantity, oi.price, (oi.quantity * oi.price) as subtotal
+FROM TB_ORDER_ITEM oi
+INNER JOIN TB_PRODUCT p ON oi.product_id = p.id
+WHERE oi.order_id = 1;
 ```
 
 ### Configuração do Banco de Dados
@@ -1647,7 +2225,10 @@ spring.jpa.hibernate.ddl-auto=validate
 ### Documentação do Projeto
 
 📖 **Guias de Consulta Rápida:**
+- [`documentacao/autenticacao_autorizacao.md`](documentacao/autenticacao_autorizacao.md) - **Guia completo OAuth2 + JWT** (Authorization Server, Resource Server, Custom Grant, CORS)
 - [`documentacao/jpa.md`](documentacao/jpa.md) - Guia completo sobre JPA, modelagem e relacionamentos
+- [`documentacao/GuiaRelacionamentoJPA.md`](documentacao/GuiaRelacionamentoJPA.md) - Referência rápida de relacionamentos JPA
+- [`documentacao/excecoes.md`](documentacao/excecoes.md) - Tratamento de exceções e validações
 - [`documentacao/anotacoes_bean_validation.md`](documentacao/anotacoes_bean_validation.md) - Bean Validation com mensagens amigáveis
 - [`documentacao/excecoes.md`](documentacao/excecoes.md) - Tratamento de exceções padronizado
 
