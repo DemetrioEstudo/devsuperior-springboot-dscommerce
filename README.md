@@ -14,11 +14,12 @@ Sistema backend para gerenciamento de produtos, categorias, usuários, pedidos e
 - ✅ OAuth2 Authorization Server
 - ✅ Autenticação com username/password (Custom Grant Type)
 - ✅ Tokens JWT assinados com RSA 2048 bits
-- ✅ Autorização baseada em roles (`ROLE_ADMIN`, `ROLE_OPERATOR`)
+- ✅ Autorização baseada em roles (`ROLE_ADMIN`, `ROLE_OPERATOR`, `ROLE_CLIENT`)
 - ✅ Proteção de endpoints com `@PreAuthorize`
 - ✅ CORS configurável para frontend
 - ✅ Criptografia de senhas com BCrypt
 - ✅ UserDetailsService customizado
+- ✅ Endpoint para obter dados do usuário autenticado (`/users/me`)
 
 **📦 Gestão de Produtos:**
 - ✅ Buscar produto por ID
@@ -29,6 +30,11 @@ Sistema backend para gerenciamento de produtos, categorias, usuários, pedidos e
 - ✅ Validação de dados com Bean Validation
 - ✅ Tratamento de exceções personalizado com `@ControllerAdvice`
 - ✅ Validação de integridade referencial
+
+**👤 Gestão de Usuários:**
+- ✅ Obter dados do usuário logado (requer autenticação)
+- ✅ DTO de usuário sem exposição de dados sensíveis
+- ✅ Extração de informações do token JWT
 
 
 ## 📁 Estrutura de Arquivos
@@ -49,6 +55,7 @@ dscommerce/
 │   │
 │   ├── controllers/                    # Camada de Apresentação (REST API)
 │   │   ├── ProductController.java
+│   │   ├── UserController.java                # Endpoints de usuário
 │   │   └── handlers/
 │   │       └── ControllerExceptionHandler.java
 │   │
@@ -78,6 +85,7 @@ dscommerce/
 │   │
 │   └── dto/                            # Data Transfer Objects
 │       ├── ProductDTO.java
+│       ├── UserDTO.java                       # DTO de usuário (sem senha)
 │       ├── CustomError.java
 │       ├── FieldMessage.java
 │       └── ValidationError.java
@@ -933,6 +941,60 @@ public class ProductController {
 - ✅ Header `Location` no POST (RFC 7231)
 - ✅ Status HTTP adequados para cada operação
 
+### UserController
+
+Controller responsável por gerenciar endpoints relacionados ao usuário autenticado.
+
+```java
+@RestController
+@RequestMapping(value = "/users")
+public class UserController {
+
+    @Autowired
+    private UserService service;
+
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_CLIENT')")
+    @GetMapping(value = "/me")
+    public ResponseEntity<UserDTO> getMe() {
+        UserDTO dto = service.getMe();
+        return ResponseEntity.ok(dto);
+    }
+}
+```
+
+### Endpoints de Usuário
+
+| Método | Endpoint | Descrição | Autorização | Status de Sucesso |
+|--------|----------|-----------|-------------|-------------------|
+| GET | `/users/me` | Obter dados do usuário autenticado | `ROLE_ADMIN` ou `ROLE_CLIENT` | 200 OK |
+
+**Características:**
+- ✅ Protegido por autenticação JWT
+- ✅ Retorna dados do usuário logado extraídos do token
+- ✅ Utiliza `@PreAuthorize` para controle de acesso
+- ✅ Não requer passar ID (obtido do contexto de segurança)
+
+**Exemplo de Requisição:**
+
+```http
+GET http://localhost:8080/users/me
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+Accept: application/json
+```
+
+**Exemplo de Resposta:**
+
+```json
+{
+    "id": 2,
+    "name": "Maria Brown",
+    "email": "maria@gmail.com",
+    "phone": "977777777",
+    "birthDate": "2001-07-25",
+    "roles": ["ROLE_CLIENT"]
+}
+```
+
 ---
 
 ## ⚙️ Service (Camada de Lógica de Negócio)
@@ -1015,6 +1077,88 @@ public class ProductService {
 | Conversão Entity → DTO | Nunca expõe entidades JPA |
 | Try-catch específicos | Captura exceções do JPA e lança exceções de negócio |
 
+### UserService
+
+Service responsável por gerenciar usuários e implementar o `UserDetailsService` para autenticação.
+
+```java
+@Service
+public class UserService implements UserDetailsService {
+
+    @Autowired
+    private UserRepository repository;
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        List<UserDetailsProjection> result = repository.searchUserAndRolesByEmail(username);
+        if (result.size() == 0) {
+            throw new UsernameNotFoundException("Email not found");
+        }
+
+        User user = new User();
+        user.setEmail(result.get(0).getUsername());
+        user.setPassword(result.get(0).getPassword());
+        for (UserDetailsProjection projection : result) {
+            user.addRole(new Role(projection.getRoleId(), projection.getAuthority()));
+        }
+
+        return user;
+    }
+
+    protected User authenticated() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            Jwt jwtPrincipal = (Jwt) authentication.getPrincipal();
+            String username = jwtPrincipal.getClaim("username");
+            return repository.findByEmail(username).get();
+        } catch (Exception e) {
+            throw new UsernameNotFoundException("Invalid user");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public UserDTO getMe() {
+        User entity = authenticated();
+        return new UserDTO(entity);
+    }
+}
+```
+
+**Responsabilidades:**
+
+1. **Autenticação (`loadUserByUsername`)**
+   - Carrega usuário do banco de dados
+   - Busca roles através de query customizada
+   - Retorna objeto `UserDetails` para Spring Security
+
+2. **Obter usuário autenticado (`authenticated`)**
+   - Extrai dados do contexto de segurança
+   - Decodifica JWT e obtém username
+   - Busca usuário completo no banco
+
+3. **Retornar dados do usuário logado (`getMe`)**
+   - Utiliza o método `authenticated()` para obter usuário
+   - Converte entidade para DTO
+   - Garante que apenas dados seguros são expostos
+
+**Fluxo de Autenticação:**
+
+```
+1. Cliente envia username/password
+   ↓
+2. UserService.loadUserByUsername() é chamado
+   ↓
+3. Busca usuário e roles no banco
+   ↓
+4. Spring Security valida senha
+   ↓
+5. Token JWT é gerado com claims do usuário
+   ↓
+6. Cliente usa token em requisições subsequentes
+   ↓
+7. UserService.getMe() retorna dados do token
+```
+
 ---
 
 ## 📦 Repository (Camada de Acesso a Dados)
@@ -1053,6 +1197,52 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 - ✅ Suporte automático a paginação
 - ✅ Type-safe queries
 - ✅ Redução de código boilerplate
+
+### UserRepository
+
+Repository responsável por operações de usuários, incluindo queries customizadas para autenticação.
+
+```java
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    Optional<User> findByEmail(String email);
+
+    @Query(nativeQuery = true, value = """
+        SELECT tb_user.email AS username, tb_role.id AS roleId, tb_role.authority
+        FROM tb_user
+        INNER JOIN tb_user_role ON tb_user.id = tb_user_role.user_id
+        INNER JOIN tb_role ON tb_role.id = tb_user_role.role_id
+        WHERE tb_user.email = :email
+    """)
+    List<UserDetailsProjection> searchUserAndRolesByEmail(String email);
+}
+```
+
+**Métodos Customizados:**
+
+| Método | Descrição | Retorno |
+|--------|-----------|---------|
+| `findByEmail(String email)` | Busca usuário por email | `Optional<User>` |
+| `searchUserAndRolesByEmail(String email)` | Busca usuário com roles (projeção) | `List<UserDetailsProjection>` |
+
+**Por que usar Native Query com Projeção?**
+
+1. **Performance**: Evita carregar objetos completos desnecessariamente
+2. **Simplicidade**: Retorna apenas os campos necessários para autenticação
+3. **Flexibilidade**: Permite JOIN otimizado entre tabelas
+
+**UserDetailsProjection:**
+
+```java
+public interface UserDetailsProjection {
+    String getUsername();
+    String getPassword();
+    Long getRoleId();
+    String getAuthority();
+}
+```
+
+Esta projeção é usada pelo `UserService` para construir o objeto `UserDetails` necessário para autenticação.
 
 ---
 
@@ -1375,6 +1565,76 @@ public class FieldMessage {
     public String getMessage() {
         return message;
     }
+}
+```
+
+---
+
+### UserDTO
+
+DTO utilizado para transferir dados de usuários autenticados sem expor informações sensíveis (como senha).
+
+```java
+package br.com.klsys.dscommerce.dto;
+
+import br.com.klsys.dscommerce.entities.User;
+import org.springframework.security.core.GrantedAuthority;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+public class UserDTO {
+
+    private Long id;
+    private String name;
+    private String email;
+    private String phone;
+    private LocalDate birthDate;
+    private List<String> roles = new ArrayList<>();
+
+    public UserDTO() {
+    }
+
+    public UserDTO(User entity) {
+        id = entity.getId();
+        name = entity.getName();
+        email = entity.getEmail();
+        phone = entity.getPhone();
+        birthDate = entity.getBirthDate();
+        for (GrantedAuthority role : entity.getRoles()) {
+            roles.add(role.getAuthority());
+        }
+    }
+
+    // Getters públicos (essenciais para serialização JSON)
+    public Long getId() { return id; }
+    public String getName() { return name; }
+    public String getEmail() { return email; }
+    public String getPhone() { return phone; }
+    public LocalDate getBirthDate() { return birthDate; }
+    public List<String> getRoles() { return roles; }
+}
+```
+
+**Características:**
+
+- ✅ **Não expõe senha** - Segurança em primeiro lugar
+- ✅ **Serialização JSON** - Todos os campos têm getters públicos
+- ✅ **Roles como Strings** - Evita referências circulares
+- ✅ **LocalDate** - Suportado nativamente pelo Jackson
+- ✅ **Construtor da entidade** - Conversão automática User → UserDTO
+
+**Exemplo de resposta JSON:**
+
+```json
+{
+    "id": 2,
+    "name": "Maria Brown",
+    "email": "maria@gmail.com",
+    "phone": "977777777",
+    "birthDate": "2001-07-25",
+    "roles": ["ROLE_CLIENT"]
 }
 ```
 
@@ -1791,6 +2051,51 @@ Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ---
 
+### 6. Obter Dados do Usuário Autenticado
+
+**🔐 Requer:** `ROLE_ADMIN` ou `ROLE_CLIENT`
+
+**Request:**
+```http
+GET http://localhost:8080/users/me
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+Accept: application/json
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": 2,
+  "name": "Maria Brown",
+  "email": "maria@gmail.com",
+  "phone": "977777777",
+  "birthDate": "2001-07-25",
+  "roles": ["ROLE_OPERATOR", "ROLE_ADMIN"]
+}
+```
+
+**Como funciona:**
+1. Token JWT é validado
+2. Username (email) é extraído dos claims do token
+3. Usuário completo é buscado no banco de dados
+4. Dados são convertidos para UserDTO (sem senha)
+5. JSON é retornado ao cliente
+
+**Possíveis Erros:**
+
+| Status | Erro | Causa |
+|--------|------|-------|
+| `401 Unauthorized` | Token ausente ou inválido | Não enviou header `Authorization` ou token expirado |
+| `403 Forbidden` | Permissão negada | Usuário não tem `ROLE_ADMIN` ou `ROLE_CLIENT` |
+| `406 Not Acceptable` | Formato não aceito | Falta header `Accept: application/json` |
+
+**Dica:** Este endpoint é útil para:
+- Exibir dados do usuário logado no frontend
+- Validar se o token ainda é válido
+- Carregar informações do perfil
+
+---
+
 ### Testando com cURL
 
 ```bash
@@ -1824,6 +2129,11 @@ curl -X PUT http://localhost:8080/products/1 \
 # DELETE - Deletar (requer ROLE_ADMIN)
 curl -X DELETE http://localhost:8080/products/1 \
   -H "Authorization: Bearer $TOKEN"
+
+# GET - Obter dados do usuário autenticado (requer autenticação)
+curl -X GET http://localhost:8080/users/me \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json"
 ```
 
 # PUT - Atualizar
