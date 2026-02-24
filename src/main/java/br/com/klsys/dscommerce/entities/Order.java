@@ -77,6 +77,10 @@ public class Order {
         this.payment = payment;
     }
 
+    public Set<OrderItem> getItems() {
+        return items;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
