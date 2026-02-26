@@ -134,6 +134,7 @@ public class User implements UserDetails {
         return roles;
     }
 
+
     // MÉTODOS AUXILIARES
     public void addRole(Role role) {
         roles.add(role);
@@ -147,6 +148,8 @@ public class User implements UserDetails {
         }
         return false;
     }
+
+
 
     // EQUALS E HASHCODE (IMPORTANTE PARA COMPARAÇÕES EM CONJUNTOS)
     @Override

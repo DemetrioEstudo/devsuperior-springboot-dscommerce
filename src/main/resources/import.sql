@@ -1,9 +1,10 @@
 -- 1. USUÁRIOS (Certifique-se de preencher todos os campos obrigatórios)
-INSERT INTO tb_user (name, email, password, phone, birth_date) VALUES ('Alex', 'alex@gmail.com', '$2y$10$EL1OjaRlHrsTg0C5VpO9Levfu6cc6vQewysJsz9txC7Mn1SXDHdCW', '99999999', '1990-07-25');
 INSERT INTO tb_user (name, email, password, phone, birth_date) VALUES ('Maria', 'maria@gmail.com', '$2y$10$EL1OjaRlHrsTg0C5VpO9Levfu6cc6vQewysJsz9txC7Mn1SXDHdCW', '88888888', '1992-05-15');
+INSERT INTO tb_user (name, email, password, phone, birth_date) VALUES ('Alex', 'alex@gmail.com', '$2y$10$EL1OjaRlHrsTg0C5VpO9Levfu6cc6vQewysJsz9txC7Mn1SXDHdCW', '99999999', '1990-07-25');
+
 
 -- 2. ROLES
-INSERT INTO tb_role (authority) VALUES ('ROLE_OPERATOR');
+INSERT INTO tb_role (authority) VALUES ('ROLE_CLIENT');
 INSERT INTO tb_role (authority) VALUES ('ROLE_ADMIN');
 
 -- 3. ASSOCIAÇÃO USUÁRIO-ROLE (User_id 1 e 2 agora existem)
