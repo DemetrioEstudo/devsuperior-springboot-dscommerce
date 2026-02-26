@@ -3,6 +3,7 @@ package br.com.klsys.dscommerce.dto;
 import br.com.klsys.dscommerce.entities.Order;
 import br.com.klsys.dscommerce.entities.OrderItem;
 import br.com.klsys.dscommerce.entities.OrderStatus;
+import jakarta.validation.constraints.NotEmpty;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -15,7 +16,13 @@ public class OrderDTO {
 
     private ClientDTO  client;
     private PaymentDTO pyment;
+
+    @NotEmpty (message = "A ordem deve conter pelo menos um item")
     private List<OrderItemDTO> items = new ArrayList<>();
+
+
+    public OrderDTO() {
+    }
 
     public OrderDTO(Long id, Instant moment, OrderStatus status, ClientDTO client, PaymentDTO pyment) {
         this.id = id;

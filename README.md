@@ -56,18 +56,22 @@ dscommerce/
 │   ├── controllers/                    # Camada de Apresentação (REST API)
 │   │   ├── ProductController.java
 │   │   ├── UserController.java                # Endpoints de usuário
+│   │   ├── OrderController.java               # Endpoints de pedidos
 │   │   └── handlers/
 │   │       └── ControllerExceptionHandler.java
 │   │
 │   ├── services/                       # Camada de Lógica de Negócio
 │   │   ├── ProductService.java
 │   │   ├── UserService.java                   # UserDetailsService (autenticação)
+│   │   ├── OrderService.java                  # Lógica de negócio de pedidos
 │   │   └── exceptions/
 │   │       └── ResourceNotFoundException.java
 │   │
 │   ├── repositories/                   # Camada de Acesso a Dados
 │   │   ├── ProductRepository.java
-│   │   └── UserRepository.java
+│   │   ├── UserRepository.java
+│   │   ├── OrderRepository.java               # Repositório de pedidos
+│   │   └── OrderItemRepository.java           # Repositório de itens de pedido
 │   │
 │   ├── entities/                       # Entidades JPA (Modelo de Domínio)
 │   │   ├── Product.java
@@ -86,6 +90,10 @@ dscommerce/
 │   └── dto/                            # Data Transfer Objects
 │       ├── ProductDTO.java
 │       ├── UserDTO.java                       # DTO de usuário (sem senha)
+│       ├── OrderDTO.java                      # DTO de pedido
+│       ├── OrderItemDTO.java                  # DTO de item de pedido
+│       ├── ClientDTO.java                     # DTO de cliente (dentro do pedido)
+│       ├── PaymentDTO.java                    # DTO de pagamento
 │       ├── CustomError.java
 │       ├── FieldMessage.java
 │       └── ValidationError.java
@@ -995,6 +1003,156 @@ Accept: application/json
 }
 ```
 
+### OrderController
+
+Controller responsável por gerenciar endpoints relacionados a pedidos.
+
+```java
+@RestController
+@RequestMapping(value="/orders")
+public class OrderController {
+
+    @Autowired
+    private OrderService service;
+
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    @GetMapping(value = "/{id}")
+    public ResponseEntity<OrderDTO> findById(@PathVariable Long id){
+        OrderDTO dto = service.findById(id);
+        return ResponseEntity.ok(dto);
+    }
+
+    @PreAuthorize("hasRole('ROLE_OPERATOR')")
+    @PostMapping
+    public ResponseEntity<OrderDTO> insert(@Valid @RequestBody OrderDTO dto){
+        dto = service.insert(dto);
+        URI uri = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}")
+                .buildAndExpand(dto.getId()).toUri();
+        return ResponseEntity.created(uri).body(dto);
+    }
+}
+```
+
+### Endpoints de Pedidos
+
+| Método | Endpoint | Descrição | Autorização | Status de Sucesso |
+|--------|----------|-----------|-------------|-------------------|
+| GET | `/orders/{id}` | Buscar pedido por ID | `ROLE_ADMIN` | 200 OK |
+| POST | `/orders` | Criar novo pedido | `ROLE_OPERATOR` | 201 Created |
+
+**Características:**
+- ✅ Protegido por autenticação JWT
+- ✅ Validação de entrada com `@Valid`
+- ✅ Associação automática do usuário autenticado como cliente do pedido
+- ✅ Status inicial definido como `WAITING_PAYMENT`
+- ✅ Momento do pedido registrado automaticamente com `Instant.now()`
+- ✅ Header `Location` no POST com URI do recurso criado
+- ✅ Validação de pelo menos 1 item no pedido (`@NotEmpty`)
+
+**Exemplo de Requisição POST:**
+
+```http
+POST http://localhost:8080/orders
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "productId": 1,
+      "quantity": 2
+    },
+    {
+      "productId": 3,
+      "quantity": 1
+    }
+  ]
+}
+```
+
+**Exemplo de Resposta POST (201 Created):**
+
+```json
+{
+    "id": 4,
+    "moment": "2026-02-26T15:30:00Z",
+    "status": "WAITING_PAYMENT",
+    "client": {
+        "id": 1,
+        "name": "Alex Green"
+    },
+    "payment": null,
+    "items": [
+        {
+            "productId": 1,
+            "name": "The Lord of the Rings",
+            "price": 90.5,
+            "quantity": 2,
+            "subTotal": 181.0
+        },
+        {
+            "productId": 3,
+            "name": "Macbook Pro",
+            "price": 1250.0,
+            "quantity": 1,
+            "subTotal": 1250.0
+        }
+    ],
+    "total": 1431.0
+}
+```
+
+**Exemplo de Requisição GET:**
+
+```http
+GET http://localhost:8080/orders/1
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+Accept: application/json
+```
+
+**Exemplo de Resposta GET (200 OK):**
+
+```json
+{
+    "id": 1,
+    "moment": "2022-07-25T13:00:00Z",
+    "status": "PAID",
+    "client": {
+        "id": 1,
+        "name": "Alex Green"
+    },
+    "payment": {
+        "id": 1,
+        "moment": "2022-07-25T15:00:00Z"
+    },
+    "items": [
+        {
+            "productId": 1,
+            "name": "The Lord of the Rings",
+            "price": 90.5,
+            "quantity": 2,
+            "subTotal": 181.0
+        },
+        {
+            "productId": 3,
+            "name": "Macbook Pro",
+            "price": 1250.0,
+            "quantity": 1,
+            "subTotal": 1250.0
+        }
+    ],
+    "total": 1431.0
+}
+```
+
+**Validações Implementadas:**
+
+| Campo | Validação | Mensagem |
+|-------|-----------|----------|
+| `items` | `@NotEmpty` | "A ordem deve conter pelo menos um item" |
+| `productId` | Deve existir no banco | Lança exceção se produto não encontrado |
+| `quantity` | Número positivo | Validado na lógica de negócio |
+
 ---
 
 ## ⚙️ Service (Camada de Lógica de Negócio)
@@ -1140,6 +1298,131 @@ public class UserService implements UserDetailsService {
    - Utiliza o método `authenticated()` para obter usuário
    - Converte entidade para DTO
    - Garante que apenas dados seguros são expostos
+
+### OrderService
+
+Service responsável por gerenciar a lógica de negócio de pedidos.
+
+```java
+@Service
+public class OrderService {
+
+    @Autowired
+    private OrderRepository repository;
+
+    @Autowired
+    private OrderItemRepository orderItemRepository;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Transactional(readOnly = true)
+    public OrderDTO findById(Long id) {
+        Order order = repository.findById(id).orElseThrow(
+                () -> new ResourceNotFoundException("Recurso não encontrado"));
+        return new OrderDTO(order);
+    }
+
+    @Transactional
+    public OrderDTO insert(OrderDTO dto) {
+        Order order = new Order();
+        
+        // Define momento atual
+        order.setMoment(Instant.now());
+        
+        // Define status inicial
+        order.setOrderStatus(OrderStatus.WAITING_PAYMENT);
+        
+        // Associa usuário autenticado como cliente
+        User user = userService.authenticated();
+        order.setClient(user);
+        
+        // Adiciona itens ao pedido
+        for (OrderItemDTO itemDTO : dto.getItems()) {
+            Product product = productRepository.getReferenceById(itemDTO.getProductId());
+            OrderItem item = new OrderItem(order, product, itemDTO.getQuantity(), product.getPrice());
+            order.getItems().add(item);
+        }
+        
+        // Persiste pedido e itens
+        repository.save(order);
+        orderItemRepository.saveAll(order.getItems());
+        
+        return new OrderDTO(order);
+    }
+}
+```
+
+**Responsabilidades:**
+
+1. **Buscar pedido por ID (`findById`)**
+   - Busca pedido no repositório
+   - Lança exceção se não encontrado
+   - Converte entidade para DTO com todos os relacionamentos
+
+2. **Inserir novo pedido (`insert`)**
+   - **Momento:** Define automaticamente com `Instant.now()`
+   - **Status:** Inicia como `WAITING_PAYMENT`
+   - **Cliente:** Obtém usuário autenticado do contexto de segurança
+   - **Itens:** Itera sobre os itens do DTO e:
+     - Busca produto no banco via `getReferenceById()`
+     - Captura preço atual do produto (não confia no cliente)
+     - Cria `OrderItem` associando order + product + quantity + price
+   - **Persistência:** Salva order e depois todos os items em lote
+   - **Transação:** Tudo executado em uma única transação (@Transactional)
+
+**Fluxo de Inserção:**
+
+```
+1. Cliente envia JSON com lista de items (productId + quantity)
+   ↓
+2. OrderService cria entidade Order vazia
+   ↓
+3. Define moment = Instant.now()
+   ↓
+4. Define status = WAITING_PAYMENT
+   ↓
+5. Busca User autenticado via UserService.authenticated()
+   ↓
+6. Define order.client = user
+   ↓
+7. Para cada item do DTO:
+   - Busca Product do banco
+   - Captura price do produto (segurança: não confia no cliente)
+   - Cria OrderItem(order, product, quantity, price)
+   - Adiciona item à lista order.items
+   ↓
+8. Persiste Order no banco
+   ↓
+9. Persiste todos OrderItems em lote
+   ↓
+10. Retorna OrderDTO com dados completos (incluindo total calculado)
+```
+
+**Características de Segurança:**
+
+| Aspecto | Implementação |
+|---------|---------------|
+| **Autenticação** | Usuário deve estar autenticado (token JWT válido) |
+| **Autorização** | Requer `ROLE_OPERATOR` no token |
+| **Cliente** | Associado automaticamente (não pode ser falsificado) |
+| **Preço** | Sempre obtido do banco (cliente não envia preço) |
+| **Produto** | Valida existência via `getReferenceById()` |
+| **Transação** | Rollback automático em caso de erro |
+
+**Boas Práticas:**
+
+| Prática | Justificativa |
+|---------|---------------|
+| `@Transactional` | Garante atomicidade: ou salva tudo ou nada |
+| `getReferenceById()` | Evita SELECT completo (apenas proxy) |
+| `saveAll()` | Batch insert otimizado para itens |
+| `Instant.now()` | Timestamp preciso e timezone-aware |
+| `authenticated()` | Segurança: cliente vem do token, não do JSON |
+| Preço do banco | Evita manipulação de preços pelo cliente |
 
 **Fluxo de Autenticação:**
 
@@ -2527,6 +2810,178 @@ spring.datasource.password=sua-senha
 spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
 spring.jpa.hibernate.ddl-auto=validate
 ```
+
+---
+
+## 🐛 Troubleshooting (Problemas Comuns)
+
+### Erro: 403 Forbidden ao criar pedido
+
+**Sintoma:**
+```json
+{
+    "timestamp": "2026-02-26T13:26:54.630+00:00",
+    "status": 403,
+    "error": "Forbidden",
+    "path": "/orders"
+}
+```
+
+**Causa:** O usuário autenticado não possui a role `ROLE_OPERATOR` necessária para criar pedidos.
+
+**Solução:**
+1. Verifique as roles do usuário no banco:
+```sql
+SELECT u.email, r.authority 
+FROM tb_user u 
+INNER JOIN tb_user_role ur ON u.id = ur.user_id 
+INNER JOIN tb_role r ON r.id = ur.role_id 
+WHERE u.email = 'alex@gmail.com';
+```
+
+2. Adicione a role necessária no `import.sql`:
+```sql
+-- Se ROLE_OPERATOR não existe, crie:
+INSERT INTO tb_role (authority) VALUES ('ROLE_OPERATOR');
+
+-- Associe ao usuário (assumindo user_id=1, role_id=1):
+INSERT INTO tb_user_role (user_id, role_id) VALUES (1, 1);
+```
+
+3. Faça login novamente para obter novo token com as roles atualizadas.
+
+---
+
+### Erro: Cannot construct instance of OrderDTO/OrderItemDTO
+
+**Sintoma:**
+```
+InvalidDefinitionException: Cannot construct instance of OrderDTO 
+(no Creators, like default constructor, exist)
+```
+
+**Causa:** Classes DTO não possuem construtor padrão (vazio) necessário para o Jackson deserializar JSON.
+
+**Solução:** Adicione construtor vazio nas classes DTO:
+
+```java
+public class OrderDTO {
+    // Campos...
+    
+    // ✅ Construtor padrão (obrigatório)
+    public OrderDTO() {
+    }
+    
+    // Construtor com parâmetros
+    public OrderDTO(Order entity) {
+        // ...
+    }
+}
+```
+
+Faça o mesmo para `OrderItemDTO`, `ClientDTO` e `PaymentDTO`.
+
+---
+
+### Erro: 500 Internal Server Error ao buscar produto
+
+**Sintoma:**
+```json
+{
+    "status": 500,
+    "error": "Internal Server Error",
+    "path": "/products/2"
+}
+```
+
+**Causa:** Possível erro no mapeamento JPA ou dados inconsistentes no banco.
+
+**Soluções:**
+
+1. **Verifique os logs do console** - procure por stack traces detalhadas
+2. **Verifique relacionamentos JPA** - `@OneToMany`, `@ManyToMany` configurados corretamente
+3. **Verifique dados no H2 Console:**
+```sql
+SELECT * FROM tb_product WHERE id = 2;
+SELECT * FROM tb_product_category WHERE product_id = 2;
+```
+
+4. **Modo debug** - adicione no `application.properties`:
+```properties
+logging.level.org.hibernate.SQL=DEBUG
+logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
+```
+
+---
+
+### Erro: 401 Unauthorized
+
+**Sintoma:**
+```json
+{
+    "status": 401,
+    "error": "Unauthorized"
+}
+```
+
+**Causas e Soluções:**
+
+| Causa | Solução |
+|-------|---------|
+| Token ausente | Adicione header: `Authorization: Bearer <token>` |
+| Token expirado | Faça login novamente (`POST /oauth2/token`) |
+| Token inválido | Verifique se copiou o token completo |
+| Formato incorreto | Use `Bearer <token>`, não `<token>` sozinho |
+
+**Como testar no Postman:**
+1. Aba **Authorization**
+2. Type: **Bearer Token**
+3. Cole o `access_token` recebido no login
+
+---
+
+### Erro: A ordem deve conter pelo menos um item
+
+**Sintoma:**
+```json
+{
+    "status": 422,
+    "error": "Dados inválidos",
+    "errors": [
+        {
+            "fieldName": "items",
+            "message": "A ordem deve conter pelo menos um item"
+        }
+    ]
+}
+```
+
+**Causa:** JSON enviado não contém itens ou lista está vazia.
+
+**Solução:** Envie pelo menos 1 item:
+```json
+{
+  "items": [
+    {
+      "productId": 1,
+      "quantity": 2
+    }
+  ]
+}
+```
+
+---
+
+### Tabela de Erros HTTP
+
+| Código | Significado | Ação |
+|--------|-------------|------|
+| 400 | Dados inválidos no body | Verifique JSON enviado |
+| 401 | Não autenticado | Faça login e use o token |
+| 403 | Sem permissão | Usuário precisa da role adequada |
+| 404 | Recurso não encontrado | Verifique se ID existe no banco |
+| 422 | Validação falhou | Corrija os campos indicados em `errors` |
+| 500 | Erro no servidor | Verifique logs do console |
 
 ---
 
