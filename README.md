@@ -1131,6 +1131,7 @@ Accept: application/json
             "name": "The Lord of the Rings",
             "price": 90.5,
             "quantity": 2,
+            "imageUrl": "https://raw.githubusercontent.com/devsuperior/dscatalog-resources/master/backend/img/1-big.jpg",
             "subTotal": 181.0
         },
         {
@@ -1138,6 +1139,7 @@ Accept: application/json
             "name": "Macbook Pro",
             "price": 1250.0,
             "quantity": 1,
+            "imageUrl": "https://raw.githubusercontent.com/devsuperior/dscatalog-resources/master/backend/img/3-big.jpg",
             "subTotal": 1250.0
         }
     ],
@@ -1152,6 +1154,9 @@ Accept: application/json
 | `items` | `@NotEmpty` | "A ordem deve conter pelo menos um item" |
 | `productId` | Deve existir no banco | Lança exceção se produto não encontrado |
 | `quantity` | Número positivo | Validado na lógica de negócio |
+| `imageUrl` | Obtido automaticamente | Preenchido pelo servidor a partir do produto |
+
+**Nota:** Os campos `name`, `price` e `imageUrl` de cada item são preenchidos automaticamente pelo servidor a partir dos dados do produto no banco. O cliente envia apenas `productId` e `quantity`.
 
 ---
 
@@ -1373,6 +1378,7 @@ public class OrderService {
      - Cria `OrderItem` associando order + product + quantity + price
    - **Persistência:** Salva order e depois todos os items em lote
    - **Transação:** Tudo executado em uma única transação (@Transactional)
+   - **Resposta:** OrderDTO inclui dados completos com `imageUrl` de cada produto
 
 **Fluxo de Inserção:**
 
@@ -1399,7 +1405,9 @@ public class OrderService {
    ↓
 9. Persiste todos OrderItems em lote
    ↓
-10. Retorna OrderDTO com dados completos (incluindo total calculado)
+10. Retorna OrderDTO com dados completos:
+    - Total calculado
+    - Cada item com name, price, imageUrl do produto
 ```
 
 **Características de Segurança:**
@@ -1410,6 +1418,7 @@ public class OrderService {
 | **Autorização** | Requer `ROLE_OPERATOR` no token |
 | **Cliente** | Associado automaticamente (não pode ser falsificado) |
 | **Preço** | Sempre obtido do banco (cliente não envia preço) |
+| **Imagem** | URL da imagem obtida do produto no banco |
 | **Produto** | Valida existência via `getReferenceById()` |
 | **Transação** | Rollback automático em caso de erro |
 
@@ -1920,6 +1929,195 @@ public class UserDTO {
     "roles": ["ROLE_CLIENT"]
 }
 ```
+
+---
+
+### OrderItemDTO
+
+DTO para representar cada item individual de um pedido, incluindo informações do produto.
+
+```java
+public class OrderItemDTO {
+    private Long productId;
+    private String name;
+    private Double price;
+    private Integer quantity;
+    private String imageUrl;
+
+    public OrderItemDTO() {
+    }
+
+    public OrderItemDTO(OrderItem entity) {
+        this.productId = entity.getProduct().getId();
+        this.name = entity.getProduct().getName();
+        this.price = entity.getPrice();
+        this.quantity = entity.getQuantity();
+        this.imageUrl = entity.getProduct().getImgUrl();
+    }
+
+    public Double getSubTotal() {
+        return price * quantity;
+    }
+    
+    // Getters
+}
+```
+
+**Características:**
+
+- ✅ **productId** - ID do produto (para inserção/referência)
+- ✅ **name** - Nome do produto (para exibição)
+- ✅ **price** - Preço no momento da compra (histórico imutável)
+- ✅ **quantity** - Quantidade comprada
+- ✅ **imageUrl** - URL da imagem do produto (para exibição no frontend)
+- ✅ **getSubTotal()** - Calcula automaticamente `price × quantity`
+- ✅ **Construtor vazio** - Necessário para deserialização JSON
+
+**Fluxo de dados:**
+
+```
+INSERT (Cliente → Servidor):
+{
+  "items": [
+    { 
+      "productId": 1, 
+      "quantity": 2 
+    }
+  ]
+}
+
+GET (Servidor → Cliente):
+{
+  "items": [
+    {
+      "productId": 1,
+      "name": "The Lord of the Rings",
+      "price": 90.5,
+      "quantity": 2,
+      "imageUrl": "https://raw.githubusercontent.com/.../1-big.jpg",
+      "subTotal": 181.0
+    }
+  ]
+}
+```
+
+**Nota importante:** No POST, apenas `productId` e `quantity` são enviados. Os campos `name`, `price` e `imageUrl` são obtidos automaticamente do banco de dados pelo servidor, garantindo segurança e consistência.
+
+---
+
+### OrderDTO
+
+DTO principal para transferir dados de pedidos, contendo todas as informações relacionadas (cliente, pagamento, itens).
+
+```java
+public class OrderDTO {
+    private Long id;
+    private Instant moment;
+    private OrderStatus status;
+    private ClientDTO client;
+    private PaymentDTO payment;
+    
+    @NotEmpty(message = "A ordem deve conter pelo menos um item")
+    private List<OrderItemDTO> items = new ArrayList<>();
+
+    public OrderDTO() {
+    }
+
+    public OrderDTO(Order entity) {
+        this.id = entity.getId();
+        this.moment = entity.getMoment();
+        this.status = entity.getOrderStatus();
+        this.client = new ClientDTO(entity.getClient());
+        
+        if (entity.getPayment() != null) {
+            this.payment = new PaymentDTO(entity.getPayment());
+        }
+        
+        for (OrderItem item : entity.getItems()) {
+            OrderItemDTO itemDTO = new OrderItemDTO(item);
+            items.add(itemDTO);
+        }
+    }
+
+    public Double getTotal() {
+        double sum = 0.0;
+        for (OrderItemDTO item : items) {
+            sum += item.getSubTotal();
+        }
+        return sum;
+    }
+    
+    // Getters
+}
+```
+
+**Características:**
+
+- ✅ **Construtor vazio** - Necessário para deserialização JSON (Jackson)
+- ✅ **Construtor da entidade** - Converte Order → OrderDTO com todos relacionamentos
+- ✅ **Validação** - `@NotEmpty` garante pelo menos 1 item no pedido
+- ✅ **Cálculo de total** - Método `getTotal()` soma subtotais dos itens automaticamente
+- ✅ **Aninhamento** - Contém ClientDTO, PaymentDTO e lista de OrderItemDTO
+- ✅ **Null-safe** - Verifica se payment existe antes de converter
+- ✅ **Items com imageUrl** - Cada OrderItemDTO inclui a URL da imagem do produto
+
+---
+
+### ClientDTO
+
+DTO simplificado para representar o cliente dentro de um pedido.
+
+```java
+public class ClientDTO {
+    private Long id;
+    private String name;
+
+    public ClientDTO() {
+    }
+
+    public ClientDTO(User entity) {
+        id = entity.getId();
+        name = entity.getName();
+    }
+    
+    // Getters
+}
+```
+
+**Características:**
+
+- ✅ **Minimalista** - Apenas ID e nome (dados essenciais)
+- ✅ **Desacoplado** - Não expõe dados sensíveis do usuário
+- ✅ **Construtor vazio** - Para deserialização JSON
+
+---
+
+### PaymentDTO
+
+DTO para representar pagamentos de pedidos.
+
+```java
+public class PaymentDTO {
+    private Long id;
+    private Instant moment;
+
+    public PaymentDTO() {
+    }
+
+    public PaymentDTO(Payment entity) {
+        id = entity.getId();
+        moment = entity.getMoment();
+    }
+    
+    // Getters
+}
+```
+
+**Características:**
+
+- ✅ **ID** - Identificador único do pagamento
+- ✅ **moment** - Timestamp de quando o pagamento foi realizado
+- ✅ **Null-safe** - OrderDTO verifica se payment existe antes de criar
 
 ---
 

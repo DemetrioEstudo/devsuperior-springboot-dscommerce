@@ -8,13 +8,15 @@ public class OrderItemDTO {
     private String name;
     private Double price;
     private Integer quantity;
+    private String imageUrl;
 
 
-    public OrderItemDTO(Long productId, String name, Double price, Integer quantity) {
+    public OrderItemDTO(Long productId, String name, Double price, Integer quantity, String imageUrl) {
         this.productId = productId;
         this.name = name;
         this.price = price;
         this.quantity = quantity;
+        this.imageUrl = imageUrl;
     }
 
     public OrderItemDTO() {
@@ -25,6 +27,7 @@ public class OrderItemDTO {
          this.name = entity.getProduct().getName();
          this.price = entity.getPrice();
          this.quantity = entity.getQuantity();
+         this.imageUrl = entity.getProduct().getImgUrl();
    }
 
     public Long getProductId() {
@@ -45,6 +48,10 @@ public class OrderItemDTO {
 
     public Double getSubTotal(){
         return price * quantity;
+    }
+
+    public String getImageUrl(){
+        return imageUrl;
     }
 
 
